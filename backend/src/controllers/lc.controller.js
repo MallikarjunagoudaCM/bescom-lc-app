@@ -5,12 +5,13 @@ const notifSvc = require('../services/notification.service');
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const addLog = (lc, action, user, remarks) => {
+const addLog = (lc, action, user, remarks, secretCode) => {
   lc.log.push({
     action,
     performedBy: user._id,
     performedByName: user.name,
     remarks,
+    secretCode,
     timestamp: new Date(),
   });
 };
@@ -130,10 +131,11 @@ exports.create = async (req, res) => {
 
   const user = req.user;
 
-  // Only LINEMAN, SHIFT_JE_KPTCL, AE_BESCOM, AE_KPTCL can raise LC
-  const allowedRoles = ['LINEMAN', 'SHIFT_JE_KPTCL', 'AE_BESCOM'];
+  // Only BESCOM AE, BESCOM JE, or BESCOM Lineman can raise an unplanned LC.
+  // KPTCL Shift JE can only issue the LC after it is approved and reviewed.
+  const allowedRoles = ['AE_BESCOM', 'JE_BESCOM', 'LINEMAN'];
   if (!allowedRoles.includes(user.role)) {
-    return res.status(403).json({ error: 'Only LINEMAN, JE, and AE can raise LC' });
+    return res.status(403).json({ error: 'Only AE_BESCOM, JE_BESCOM, or LINEMAN can create this LC' });
   }
 
   let finalSection = section;
@@ -147,9 +149,10 @@ exports.create = async (req, res) => {
     finalSection = user.section || section;
     finalSubstation = user.substation || substation;
     approverRole = 'AE_BESCOM';
-  } else if (user.role === 'SHIFT_JE_KPTCL') {
-    // JE provides details, should be approved by BESCOM AE
-    finalSection = user.station || section;
+  } else if (user.role === 'JE_BESCOM') {
+    // BESCOM JE provides details, should be approved by the BESCOM AE in the same section
+    finalSection = user.section || section;
+    finalSubstation = user.substation || substation;
     approverRole = 'AE_BESCOM';
   } else if (user.role === 'AE_BESCOM') {
     // AE provides full details, should be approved by AEE
@@ -191,9 +194,9 @@ exports.create = async (req, res) => {
     if (ae) {
       notifSvc.notifyLCInitiated(lc, [ae]).catch(console.error);
     }
-  } else if (user.role === 'SHIFT_JE_KPTCL') {
-    // Notify BESCOM AE for approval
-    const approver = await User.findOne({ role: 'AE_BESCOM', section: user.station, isActive: true }) || await User.findOne({ role: 'AEE', isActive: true });
+  } else if (user.role === 'JE_BESCOM') {
+    // Notify the BESCOM AE of the same section for approval
+    const approver = await User.findOne({ role: 'AE_BESCOM', section: user.section, isActive: true });
     if (approver) {
       notifSvc.notifyLCInitiated(lc, [approver]).catch(console.error);
     }
@@ -246,13 +249,11 @@ exports.approve = async (req, res) => {
       return res.status(400).json({ error: 'Initiator not found' });
     }
 
-    if (initiator.role === 'LINEMAN') {
-      if (userRole !== 'AE_BESCOM') {
-        return res.status(403).json({ error: 'Only AE_BESCOM can approve LC raised by Lineman' });
-      }
-    } else if (initiator.role === 'SHIFT_JE_KPTCL') {
-      if (!['AE_BESCOM', 'AE_KPTCL'].includes(userRole)) {
-        return res.status(403).json({ error: 'Only AE_BESCOM or AE_KPTCL can approve LC raised by Shift JE' });
+    if (initiator.role === 'LINEMAN' || initiator.role === 'JE_BESCOM') {
+      const canBescomAeApprove = userRole === 'AE_BESCOM' && req.user.section === lc.section;
+      const canAdminCreatedJeApprove = userRole === 'JE_BESCOM' && req.user.createdByAdmin && req.user.section === lc.section;
+      if (!canBescomAeApprove && !canAdminCreatedJeApprove) {
+        return res.status(403).json({ error: 'Only the BESCOM AE of the section or admin-created BESCOM JE can approve this LC' });
       }
     } else if (initiator.role === 'AE_BESCOM') {
       if (userRole !== 'AEE') {
@@ -276,7 +277,7 @@ exports.approve = async (req, res) => {
     const initiatorUser = await User.findById(lc.initiatedBy);
     notifSvc.notifyLCApproved(lc, initiatorUser).catch(console.error);
 
-    if (initiator.role === 'LINEMAN') {
+    if (['LINEMAN', 'JE_BESCOM'].includes(initiator.role)) {
       const shiftJEs = await User.find({ role: 'SHIFT_JE_KPTCL', isActive: true });
       if (shiftJEs.length) {
         notifSvc.notify({
@@ -405,11 +406,11 @@ exports.jeReview = async (req, res) => {
   const initiatorUser = await User.findById(lc.initiatedBy);
   const extraUsers = await User.find({ _id: { $in: lc.notifyUserIds } });
 
-  if (initiatorUser && initiatorUser.role === 'LINEMAN') {
+  if (initiatorUser && (initiatorUser.role === 'LINEMAN' || initiatorUser.role === 'SHIFT_JE_KPTCL')) {
     lc.status = 'DELEGATED';
     lc.assignedLineman = lc.initiatedBy;
     lc.delegatedAt = new Date();
-    addLog(lc, 'Work auto-assigned to LC requestor', req.user, req.body.remarks);
+    addLog(lc, 'Work auto-assigned to LC requestor', req.user, req.body.remarks, plainCode);
     await lc.save();
 
     notifSvc.notifyDelegated(lc, initiatorUser).catch(console.error);
@@ -417,7 +418,7 @@ exports.jeReview = async (req, res) => {
     return res.json({ lc, secretCode: plainCode, message: 'CB isolated and work auto-assigned to requestor.' });
   }
 
-  addLog(lc, 'CB isolated. JE reviewed. Secret code generated.', req.user, req.body.remarks);
+  addLog(lc, 'CB isolated. JE reviewed. Secret code generated.', req.user, req.body.remarks, plainCode);
   await lc.save();
 
   // Notify SO and extra configured users
@@ -436,6 +437,11 @@ exports.delegate = async (req, res) => {
   const lc = await LC.findById(req.params.id).select('+secretCodeHash');
   if (!lc) return res.status(404).json({ error: 'LC not found' });
   if (lc.status !== 'JE_REVIEWED') return res.status(400).json({ error: `Cannot delegate in status: ${lc.status}` });
+
+  // Check if user can delegate - only the AE who initiated the LC can delegate
+  if (req.user._id.toString() !== lc.initiatedBy._id.toString() || !['AE_BESCOM', 'AE_KPTCL'].includes(lc.initiatedBy.role)) {
+    return res.status(403).json({ error: 'Only the AE who initiated the LC can delegate' });
+  }
 
   const lineman = await User.findById(linemanId);
   if (!lineman) return res.status(404).json({ error: 'Lineman not found' });

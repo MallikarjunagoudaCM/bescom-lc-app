@@ -1,0 +1,41 @@
+name: Deploy Frontend to Azure
+
+on:
+  push:
+    branches: [main]
+    paths: [frontend/**]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm install
+
+      - name: Build React app
+        working-directory: frontend
+        run: npm run build
+        env:
+          REACT_APP_API_URL: ${{ secrets.REACT_APP_API_URL }}
+
+      - name: Create deployment ZIP
+        run: |
+          cd frontend
+          npm install express --prefix ./server-express
+          cp -r server-express/node_modules ./build-deploy-modules
+          zip -r ../frontend-deploy.zip build/ server.js package.json build-deploy-modules/
+
+      - name: Deploy to Azure Web App
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: bescom-transfer-ui
+          publish-profile: ${{ secrets.AZURE_FRONTEND_PUBLISH_PROFILE }}
+          package: frontend-deploy.zip

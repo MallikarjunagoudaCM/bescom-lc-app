@@ -15,6 +15,7 @@ const logEntrySchema = new mongoose.Schema({
   performedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   performedByName: String,
   remarks: String,
+  secretCode: String,
   timestamp: { type: Date, default: Date.now },
 }, { _id: false });
 

@@ -1,0 +1,8 @@
+{
+  "appId": "com.bescom.lc",
+  "appName": "BESCOM LC",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "http"
+  }
+}

@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
-const ROLES = ['EE', 'AEE', 'AE_BESCOM', 'AE_KPTCL', 'SHIFT_JE_KPTCL', 'LINEMAN', 'ADMIN'];
+const ROLES = ['EE', 'AEE', 'AE_BESCOM', 'JE_BESCOM', 'AE_KPTCL', 'SHIFT_JE_KPTCL', 'LINEMAN', 'ADMIN'];
 
 const userSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
@@ -18,6 +18,7 @@ const userSchema = new mongoose.Schema({
   shiftPattern: { type: String, enum: ['', 'WEEKLY', 'MONTHLY'], default: '' },
   maxShiftJEs: { type: Number, default: 0 },
   assignedToAEKPTCL: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  createdByAdmin: { type: Boolean, default: false },
   isActive: { type: Boolean, default: true },
   notifyEmail: { type: Boolean, default: true },
   notifySMS: { type: Boolean, default: false },

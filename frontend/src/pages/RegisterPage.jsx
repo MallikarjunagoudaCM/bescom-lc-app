@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { userApi } from '../api/user.api';
-import { ROLES } from '../utils/constants';
+import { getRoleLabel, ROLES } from '../utils/constants';
 import toast from 'react-hot-toast';
 
 const fieldStyle = {
@@ -45,22 +45,32 @@ export default function RegisterPage() {
   const availableRoles = isAdmin
     ? Object.entries(ROLES)
     : isBescomAE
-      ? [['LINEMAN', ROLES.LINEMAN]]
+      ? [['LINEMAN', getRoleLabel('LINEMAN', {})], ['JE_BESCOM', getRoleLabel('JE_BESCOM', {createdByAdmin: false})]]
       : isKptclAE
-        ? [['SHIFT_JE_KPTCL', ROLES.SHIFT_JE_KPTCL]]
+        ? [['SHIFT_JE_KPTCL', getRoleLabel('SHIFT_JE_KPTCL', {})]]
         : [];
 
-  const role = isBescomAE ? 'LINEMAN' : isKptclAE ? 'SHIFT_JE_KPTCL' : form.role;
+  const role = form.role || (isBescomAE ? 'LINEMAN' : isKptclAE ? 'SHIFT_JE_KPTCL' : '');
 
   const handleChange = (key, value) => {
     setForm(prev => ({ ...prev, [key]: value }));
   };
 
+  // Initialize default role for AE_BESCOM
+  useEffect(() => {
+    if (isBescomAE && !form.role) {
+      setForm(prev => ({ ...prev, role: 'LINEMAN' }));
+    }
+    if (isKptclAE && !form.role) {
+      setForm(prev => ({ ...prev, role: 'SHIFT_JE_KPTCL' }));
+    }
+  }, [isBescomAE, isKptclAE]);
+
   const handleSubmit = async (event) => {
     event.preventDefault();
     if (!allowed) return toast.error('Only ADMIN, AE_BESCOM, and AE_KPTCL can create users');
 
-    if (!form.name || !form.email || !form.phone || !form.password || (!isBescomAE && !isKptclAE && !role)) {
+    if (!form.name || !form.email || !form.phone || !form.password || !role) {
       return toast.error('Fill all required fields');
     }
 
@@ -73,6 +83,12 @@ export default function RegisterPage() {
     if (isAdmin && role === 'AE_KPTCL') {
       if (!form.station || !form.maxShiftJEs) {
         return toast.error('AE_KPTCL requires station and maxShiftJEs');
+      }
+    }
+
+    if ((isAdmin && ['JE_BESCOM', 'AE_BESCOM', 'LINEMAN'].includes(role)) || (isBescomAE && ['AE_BESCOM', 'LINEMAN', 'JE_BESCOM'].includes(role)) || role === 'AE_BESCOM' || role === 'LINEMAN' || role === 'JE_BESCOM') {
+      if (!form.division || !form.subdivision || !form.section || !form.substation) {
+        return toast.error(`${role} requires division, subdivision, section and substation`);
       }
     }
 
@@ -99,8 +115,8 @@ export default function RegisterPage() {
       role,
     };
 
-    if (isAdmin || isKptclAE) {
-      if (role === 'AE_BESCOM' || role === 'LINEMAN') {
+    if (isAdmin || isBescomAE || isKptclAE) {
+      if (role === 'AE_BESCOM' || role === 'JE_BESCOM' || role === 'LINEMAN') {
         payload.division = form.division;
         payload.subdivision = form.subdivision;
         payload.section = form.section;
@@ -168,7 +184,7 @@ export default function RegisterPage() {
               <input type="password" value={form.password} onChange={e => handleChange('password', e.target.value)} placeholder="Pass@1234" style={fieldStyle} />
             </div>
 
-            {isAdmin && (
+            {(isAdmin || isBescomAE) && (
               <div>
                 <label style={{ display: 'block', marginBottom: 6, fontSize: 12, fontWeight: 600, color: 'var(--c-text2)' }}>Role *</label>
                 <select value={form.role} onChange={e => handleChange('role', e.target.value)} style={fieldStyle}>
@@ -180,29 +196,29 @@ export default function RegisterPage() {
               </div>
             )}
 
-            {!isAdmin && (
+            {!isAdmin && !isBescomAE && (
               <div style={{ padding: '14px', borderRadius: 12, background: 'var(--c-surface2)', color: 'var(--c-text3)', fontSize: 13 }}>
-                Creating a <strong>{ROLES[role]}</strong> user. Your own profile values may be applied automatically.
+                Creating a <strong>{getRoleLabel(role, {createdByAdmin: isAdmin})}</strong> user. Your own profile values may be applied automatically.
               </div>
             )}
 
-            {(isAdmin || role === 'AE_BESCOM' || role === 'LINEMAN') && (
+            {(isAdmin || role === 'AE_BESCOM' || role === 'LINEMAN' || role === 'JE_BESCOM') && (
               <>
                 <div>
-                  <label style={{ display: 'block', marginBottom: 6, fontSize: 12, fontWeight: 600, color: 'var(--c-text2)' }}>Division {role === 'AE_BESCOM' || role === 'LINEMAN' ? '*' : ''}</label>
-                  <input type="text" value={form.division} onChange={e => handleChange('division', e.target.value)} placeholder="South" style={fieldStyle} disabled={!isAdmin} title={!isAdmin ? 'Auto-filled from your account' : ''} />
+                  <label style={{ display: 'block', marginBottom: 6, fontSize: 12, fontWeight: 600, color: 'var(--c-text2)' }}>Division {(role === 'AE_BESCOM' || role === 'LINEMAN' || role === 'JE_BESCOM') ? '*' : ''}</label>
+                  <input type="text" value={form.division} onChange={e => handleChange('division', e.target.value)} placeholder="South" style={fieldStyle} disabled={!isAdmin && !isBescomAE} title={(!isAdmin && !isBescomAE) ? 'Auto-filled from your account' : ''} />
                 </div>
                 <div>
-                  <label style={{ display: 'block', marginBottom: 6, fontSize: 12, fontWeight: 600, color: 'var(--c-text2)' }}>Subdivision {role === 'AE_BESCOM' || role === 'LINEMAN' ? '*' : ''}</label>
-                  <input type="text" value={form.subdivision} onChange={e => handleChange('subdivision', e.target.value)} placeholder="South-1" style={fieldStyle} disabled={!isAdmin} title={!isAdmin ? 'Auto-filled from your account' : ''} />
+                  <label style={{ display: 'block', marginBottom: 6, fontSize: 12, fontWeight: 600, color: 'var(--c-text2)' }}>Subdivision {(role === 'AE_BESCOM' || role === 'LINEMAN' || role === 'JE_BESCOM') ? '*' : ''}</label>
+                  <input type="text" value={form.subdivision} onChange={e => handleChange('subdivision', e.target.value)} placeholder="South-1" style={fieldStyle} disabled={!isAdmin && !isBescomAE} title={(!isAdmin && !isBescomAE) ? 'Auto-filled from your account' : ''} />
                 </div>
                 <div>
-                  <label style={{ display: 'block', marginBottom: 6, fontSize: 12, fontWeight: 600, color: 'var(--c-text2)' }}>Section {role === 'AE_BESCOM' || role === 'LINEMAN' ? '*' : ''}</label>
-                  <input type="text" value={form.section} onChange={e => handleChange('section', e.target.value)} placeholder="Section A" style={fieldStyle} disabled={!isAdmin} title={!isAdmin ? 'Auto-filled from your account' : ''} />
+                  <label style={{ display: 'block', marginBottom: 6, fontSize: 12, fontWeight: 600, color: 'var(--c-text2)' }}>Section {(role === 'AE_BESCOM' || role === 'LINEMAN' || role === 'JE_BESCOM') ? '*' : ''}</label>
+                  <input type="text" value={form.section} onChange={e => handleChange('section', e.target.value)} placeholder="Section A" style={fieldStyle} disabled={!isAdmin && !isBescomAE} title={(!isAdmin && !isBescomAE) ? 'Auto-filled from your account' : ''} />
                 </div>
                 <div>
-                  <label style={{ display: 'block', marginBottom: 6, fontSize: 12, fontWeight: 600, color: 'var(--c-text2)' }}>Substation {role === 'AE_BESCOM' || role === 'LINEMAN' ? '*' : ''}</label>
-                  <input type="text" value={form.substation} onChange={e => handleChange('substation', e.target.value)} placeholder="Koramangala" style={fieldStyle} disabled={!isAdmin} title={!isAdmin ? 'Auto-filled from your account' : ''} />
+                  <label style={{ display: 'block', marginBottom: 6, fontSize: 12, fontWeight: 600, color: 'var(--c-text2)' }}>Substation {(role === 'AE_BESCOM' || role === 'LINEMAN' || role === 'JE_BESCOM') ? '*' : ''}</label>
+                  <input type="text" value={form.substation} onChange={e => handleChange('substation', e.target.value)} placeholder="Koramangala" style={fieldStyle} disabled={!isAdmin && !isBescomAE} title={(!isAdmin && !isBescomAE) ? 'Auto-filled from your account' : ''} />
                 </div>
               </>
             )}

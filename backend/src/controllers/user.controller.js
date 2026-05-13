@@ -47,6 +47,12 @@ exports.create = async (req, res) => {
           error: 'AE_KPTCL requires: station and maxShiftJEs (1-4)',
         });
       }
+    } else if (role === 'JE_BESCOM') {
+      if (!division || !subdivision || !section || !substation) {
+        return res.status(400).json({
+          error: 'JE_BESCOM requires: division, subdivision, section, substation',
+        });
+      }
     } else if (role === 'SHIFT_JE_KPTCL') {
       if (!station || !shiftPattern || !['WEEKLY', 'MONTHLY'].includes(shiftPattern)) {
         return res.status(400).json({
@@ -61,8 +67,8 @@ exports.create = async (req, res) => {
       }
     }
   } else if (isBESCOM_SO) {
-    if (role !== 'LINEMAN') {
-      return res.status(403).json({ error: 'AE_BESCOM can only create Lineman accounts' });
+    if (!['LINEMAN', 'JE_BESCOM'].includes(role)) {
+      return res.status(403).json({ error: 'AE_BESCOM can only create Lineman or JE_BESCOM accounts' });
     }
   } else if (isKPTCL_AE) {
     if (role !== 'SHIFT_JE_KPTCL') {
@@ -84,12 +90,16 @@ exports.create = async (req, res) => {
   };
 
   if (isBESCOM_SO) {
-    userData.role = 'LINEMAN';
+    userData.role = role; // role can be LINEMAN or JE_BESCOM
     userData.division = req.user.division;
     userData.subdivision = req.user.subdivision;
     userData.section = req.user.section;
     userData.substation = req.user.substation;
     userData.feeders = req.user.feeders || [];
+    // Mark as not created by admin (created by AE_BESCOM instead)
+    if (role === 'JE_BESCOM') {
+      userData.createdByAdmin = false;
+    }
   } else if (isKPTCL_AE) {
     userData.role = 'SHIFT_JE_KPTCL';
     userData.station = req.user.station;
@@ -109,6 +119,12 @@ exports.create = async (req, res) => {
     } else if (role === 'SHIFT_JE_KPTCL') {
       userData.station = station;
       userData.shiftPattern = shiftPattern;
+    } else if (role === 'JE_BESCOM') {
+      userData.division = division;
+      userData.subdivision = subdivision;
+      userData.section = section;
+      userData.substation = substation;
+      userData.createdByAdmin = true;
     } else if (role === 'LINEMAN') {
       userData.division = division;
       userData.subdivision = subdivision;
@@ -149,12 +165,11 @@ exports.updateNotificationPrefs = async (req, res) => {
 exports.getLinemanList = async (req, res) => {
   const query = { role: 'LINEMAN', isActive: true };
 
-  // BESCOM AE should only see linemen in their own section/substation
+  // BESCOM AE should only see linemen in their own location if defined.
   if (req.user.role === 'AE_BESCOM') {
-    query.division = req.user.division;
-    query.subdivision = req.user.subdivision;
-    query.section = req.user.section;
-    query.substation = req.user.substation;
+    ['division', 'subdivision', 'section', 'substation'].forEach(field => {
+      if (req.user[field]) query[field] = req.user[field];
+    });
   }
 
   const users = await User.find(query)

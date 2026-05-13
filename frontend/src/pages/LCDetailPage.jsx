@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { lcApi } from '../api/lc.api';
 import { userApi } from '../api/user.api';
 import { useAuth } from '../contexts/AuthContext';
-import { STAGES, ROLES, canPerformAction } from '../utils/constants';
+import { STAGES, getRoleLabel, canPerformAction } from '../utils/constants';
 import PhotoUpload from '../components/lc/PhotoUpload';
 import toast from 'react-hot-toast';
 
@@ -38,6 +38,13 @@ export default function LCDetailPage() {
   const [secretCode, setSecretCode] = useState(null); // shown once on JE review
   const [form, setForm] = useState({});
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const load = async () => {
     try {
@@ -125,9 +132,9 @@ export default function LCDetailPage() {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 360px', gap: 16, alignItems: 'start' }}>
-        {/* Left: Details + Log */}
-        <div>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 360px', gap: 16, alignItems: 'start' }}>
+        {/* Left: Details + Log — rendered second on mobile so Actions appear first */}
+        <div style={{ order: isMobile ? 2 : 1 }}>
           {/* LC Details */}
           <div style={{ background: 'var(--c-surface)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--c-border)', padding: '1.25rem' }}>
             <h2 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Request Details</h2>
@@ -188,14 +195,23 @@ export default function LCDetailPage() {
                   </div>
                   <div style={{ fontSize: 13 }}>{entry.action}</div>
                   {entry.remarks && <div style={{ fontSize: 12, color: 'var(--c-text3)', marginTop: 2, fontStyle: 'italic' }}>{entry.remarks}</div>}
+                  {entry.secretCode && (() => {
+                    const isInitiator = user?._id === lc.initiatedBy?._id?.toString();
+                    console.log('Secret code check:', { userId: user?._id, initiatorId: lc.initiatedBy?._id?.toString(), isInitiator, secretCode: entry.secretCode });
+                    return isInitiator;
+                  })() && (
+                    <div style={{ fontSize: 12, color: 'var(--c-warning)', marginTop: 6, padding: '8px', background: '#FFFBEB', borderRadius: 6, border: '1px solid #FCD34D', fontWeight: 500 }}>
+                      🔑 Secret Code: <span style={{ fontFamily: 'monospace', fontWeight: 700, letterSpacing: '0.15em' }}>{entry.secretCode}</span>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
           </div>
         </div>
 
-        {/* Right: Actions */}
-        <div>
+        {/* Right: Actions — rendered first on mobile */}
+        <div style={{ order: isMobile ? 1 : 2 }}>
           {/* Secret code display (shown once after JE review) */}
           {secretCode && (
             <div style={{ background: '#FFFBEB', border: '1px solid #FCD34D', borderRadius: 'var(--radius-lg)', padding: '1rem 1.25rem', marginBottom: 12 }}>
@@ -211,8 +227,8 @@ export default function LCDetailPage() {
           {/* ── APPROVE LC REQUEST */}
           {(status === 'INITIATED' && (
             (role === 'AEE' && lc.initiatedBy?.role === 'AE_BESCOM') ||
-            (role === 'AE_BESCOM' && ['LINEMAN', 'SHIFT_JE_KPTCL'].includes(lc.initiatedBy?.role)) ||
-            (role === 'AE_KPTCL' && lc.initiatedBy?.role === 'SHIFT_JE_KPTCL')
+            (role === 'AE_BESCOM' && ['LINEMAN', 'JE_BESCOM'].includes(lc.initiatedBy?.role)) ||
+            (role === 'JE_BESCOM' && user?.createdByAdmin && ['LINEMAN', 'JE_BESCOM'].includes(lc.initiatedBy?.role) && lc.section === user?.section)
           )) && (
             <Section title="✅ Approve LC Request">
               <label style={{ fontSize: 12, color: 'var(--c-text3)' }}>Approval remarks</label>
@@ -254,12 +270,12 @@ export default function LCDetailPage() {
           )}
 
           {/* ── DELEGATE (SO) */}
-          {canPerformAction(role, 'delegate') && status === 'JE_REVIEWED' && (
+          {canPerformAction(role, 'delegate') && status === 'JE_REVIEWED' && user?._id === lc.initiatedBy?._id?.toString() && (
             <Section title="👷 Delegate to Lineman">
               <label style={{ fontSize: 12, color: 'var(--c-text3)' }}>Select Lineman</label>
               <select onChange={e => set('linemanId', e.target.value)} style={{ ...inp, marginTop: 4 }}>
                 <option value="">Choose lineman...</option>
-                {linemen.map(l => <option key={l._id} value={l._id}>{l.name} ({l.phone}) — {ROLES[l.role]}</option>)}
+                {linemen.map(l => <option key={l._id} value={l._id}>{l.name} ({l.phone}) — {getRoleLabel(l.role, l)}</option>)}
               </select>
               <ActionBtn label="Assign Work" loading={acting} color="#C2410C"
                 onClick={() => {

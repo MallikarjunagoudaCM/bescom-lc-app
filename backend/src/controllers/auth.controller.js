@@ -20,11 +20,11 @@ exports.login = async (req, res) => {
 
   setRefreshCookie(res, refreshToken);
 
-  res.json({ accessToken, user: user.toSafeObject() });
+  res.json({ accessToken, refreshToken, user: user.toSafeObject() });
 };
 
 exports.refresh = async (req, res) => {
-  const token = req.cookies?.refreshToken;
+  const token = req.cookies?.refreshToken || req.body?.refreshToken;
   if (!token) return res.status(401).json({ error: 'No refresh token' });
 
   try {
@@ -37,7 +37,7 @@ exports.refresh = async (req, res) => {
     await user.save({ validateBeforeSave: false });
 
     setRefreshCookie(res, refreshToken);
-    res.json({ accessToken, user: user.toSafeObject() });
+    res.json({ accessToken, refreshToken, user: user.toSafeObject() });
   } catch {
     res.status(401).json({ error: 'Token expired or invalid' });
   }

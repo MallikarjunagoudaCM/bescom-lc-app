@@ -2,10 +2,18 @@ export const ROLES = {
   EE: 'EE',
   AEE: 'AEE',
   AE_BESCOM: 'AE (BESCOM)',
+  JE_BESCOM: 'JE (BESCOM)',
   AE_KPTCL: 'AE (KPTCL)',
   SHIFT_JE_KPTCL: 'Shift JE (KPTCL)',
   LINEMAN: 'Lineman',
   ADMIN: 'Admin',
+};
+
+export const getRoleLabel = (role, user) => {
+  if (role === 'JE_BESCOM') {
+    return user?.createdByAdmin ? 'Section officer JE' : 'Line JE';
+  }
+  return ROLES[role] || role;
 };
 
 export const STAGES = [
@@ -41,15 +49,15 @@ export const WORK_NATURES = [
 
 export const canPerformAction = (role, action) => {
   const permissions = {
-    approve:       ['AEE', 'EE', 'AE_BESCOM', 'AE_KPTCL', 'ADMIN'],
+    approve:       ['AEE', 'EE', 'AE_BESCOM', 'JE_BESCOM', 'ADMIN'],
     reject:        ['AEE', 'EE', 'ADMIN'],
     jeReview:      ['SHIFT_JE_KPTCL', 'ADMIN'],
-    delegate:      ['AE_BESCOM', 'AE_KPTCL', 'SHIFT_JE_KPTCL', 'ADMIN'],
+    delegate:      ['AE_BESCOM'],
     startWork:     ['AE_BESCOM', 'LINEMAN', 'ADMIN'],
     completeWork:  ['AE_BESCOM', 'LINEMAN', 'ADMIN'],
     closeRequest:  ['AE_BESCOM', 'LINEMAN', 'ADMIN'],
     release:       ['SHIFT_JE_KPTCL', 'ADMIN'],
-    createLC:      ['AE_BESCOM', 'SHIFT_JE_KPTCL', 'LINEMAN', 'ADMIN'],
+    createLC:      ['AE_BESCOM', 'JE_BESCOM', 'LINEMAN', 'ADMIN'],
   };
   return permissions[action]?.includes(role) || false;
 };

@@ -1,0 +1,33 @@
+name: Deploy Backend to Azure
+
+on:
+  push:
+    branches: [main]
+    paths: [backend/**]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        working-directory: backend
+        run: npm install --production
+
+      - name: Create deployment ZIP
+        run: |
+          cd backend
+          zip -r ../backend-deploy.zip src/ package.json package-lock.json node_modules/
+
+      - name: Deploy to Azure Web App
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: bescom-transfer-api
+          publish-profile: ${{ secrets.AZURE_BACKEND_PUBLISH_PROFILE }}
+          package: backend-deploy.zip

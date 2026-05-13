@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { lcApi } from '../api/lc.api';
-import { STAGES, ROLES } from '../utils/constants';
+import { STAGES, getRoleLabel } from '../utils/constants';
 import { useAuth } from '../contexts/AuthContext';
 import { format } from 'date-fns';
 
@@ -39,7 +39,7 @@ export default function DashboardPage() {
       {/* Header */}
       <div style={{ marginBottom: '1.5rem' }}>
         <h1 style={{ fontSize: 20, fontWeight: 700 }}>Good {new Date().getHours() < 12 ? 'morning' : 'afternoon'}, {user?.name?.split(' ')[0]} 👋</h1>
-        <p style={{ color: 'var(--c-text3)', fontSize: 13, marginTop: 2 }}>{ROLES[user?.role]} · {new Date().toDateString()}</p>
+        <p style={{ color: 'var(--c-text3)', fontSize: 13, marginTop: 2 }}>{getRoleLabel(user?.role, user)} · {new Date().toDateString()}</p>
       </div>
 
       {loading ? <div style={{ color: 'var(--c-text3)' }}>Loading dashboard...</div> : (

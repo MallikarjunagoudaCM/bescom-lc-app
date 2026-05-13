@@ -28,8 +28,10 @@ api.interceptors.response.use(res => res, async err => {
     orig._retry = true;
     refreshing = true;
     try {
-      const { data } = await axios.post('/api/auth/refresh', {}, { withCredentials: true });
+      const refreshToken = localStorage.getItem('refreshToken');
+      const { data } = await api.post('/auth/refresh', { refreshToken }, { withCredentials: true, timeout: 5000 });
       localStorage.setItem('accessToken', data.accessToken);
+      localStorage.setItem('refreshToken', data.refreshToken);
       queue.forEach(p => p.resolve(data.accessToken));
       queue = [];
       orig.headers.Authorization = `Bearer ${data.accessToken}`;

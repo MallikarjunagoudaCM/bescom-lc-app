@@ -92,7 +92,7 @@ export default function AdminPage() {
             <br /> • BESCOM: EE Mobile, EE Name, AEE Mobile, AEE Name, SO Mobile, SO Name, Division, Subdivision, Section, Feeders, KPTCL Substation
             <br /> • KPTCL AE: KPTCL AE, KPTCL AE Mobile, Station, MaxShiftJEs, ShiftPattern
           </p>
-          <pre style={{ margin: 0, padding: '12px', background: 'var(--c-surface2)', borderRadius: 8, overflowX: 'auto', fontSize: 12, color: 'var(--c-text3)', marginBottom: 16 }}>
+          <pre style={{ margin: 0, padding: '12px', background: 'var(--c-surface2)', borderRadius: 8, overflowX: 'auto', WebkitOverflowScrolling: 'touch', fontSize: 12, color: 'var(--c-text3)', marginBottom: 16 }}>
 {`BESCOM Row Example:
 Division,Subdivision,Section,KPTCL Substation,Feeders,EE Mobile,EE Name,AEE Mobile,AEE Name,SO Mobile,SO Name
 South,South-1,Section A,Koramangala,F01;F02,8888888888,Prakash,7777777777,Suresh,6666666666,Manoj

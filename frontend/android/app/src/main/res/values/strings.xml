@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">BESCOM LC</string>
+    <string name="title_activity_main">BESCOM LC</string>
+    <string name="package_name">com.bescom.lc</string>
+    <string name="custom_url_scheme">com.bescom.lc</string>
+</resources>

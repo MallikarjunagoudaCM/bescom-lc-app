@@ -116,39 +116,41 @@ export default function LCListPage() {
         ) : lcs.length === 0 ? (
           <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--c-text3)' }}>No records found</div>
         ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ background: 'var(--c-surface2)', borderBottom: '1px solid var(--c-border)' }}>
-                {['LC Number', 'Feeder', 'Nature of Work', 'Type', 'Status', 'Initiated', ''].map(h => (
-                  <th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: 'var(--c-text3)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {lcs.map((lc, i) => (
-                <tr key={lc._id} style={{ borderBottom: i < lcs.length - 1 ? '1px solid var(--c-border)' : 'none' }}>
-                  <td style={{ padding: '12px 14px' }}>
-                    <div style={{ fontWeight: 600, fontSize: 13, fontFamily: 'monospace' }}>{lc.lcNumber}</div>
-                    <div style={{ fontSize: 11, color: 'var(--c-text3)' }}>{lc.initiatedBy?.name}</div>
-                  </td>
-                  <td style={{ padding: '12px 14px', fontSize: 13 }}>{lc.feeder}</td>
-                  <td style={{ padding: '12px 14px', fontSize: 13 }}>{lc.natureOfWork}</td>
-                  <td style={{ padding: '12px 14px' }}>
-                    <span style={{ fontSize: 11, padding: '2px 7px', borderRadius: 4, background: lc.workType === 'PLANNED' ? 'var(--c-primary-light)' : '#FFF7ED', color: lc.workType === 'PLANNED' ? 'var(--c-primary)' : 'var(--c-warning)', fontWeight: 500 }}>
-                      {lc.workType}
-                    </span>
-                  </td>
-                  <td style={{ padding: '12px 14px' }}><Badge status={lc.status} /></td>
-                  <td style={{ padding: '12px 14px', fontSize: 12, color: 'var(--c-text3)' }}>
-                    {new Date(lc.createdAt).toLocaleDateString('en-IN')}
-                  </td>
-                  <td style={{ padding: '12px 14px' }}>
-                    <Link to={`/lc/${lc._id}`} style={{ fontSize: 12, color: 'var(--c-primary)', fontWeight: 500 }}>View →</Link>
-                  </td>
+          <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+            <table style={{ width: '100%', minWidth: 760, borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ background: 'var(--c-surface2)', borderBottom: '1px solid var(--c-border)' }}>
+                  {['LC Number', 'Feeder', 'Nature of Work', 'Type', 'Status', 'Initiated', ''].map(h => (
+                    <th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: 'var(--c-text3)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{h}</th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {lcs.map((lc, i) => (
+                  <tr key={lc._id} style={{ borderBottom: i < lcs.length - 1 ? '1px solid var(--c-border)' : 'none' }}>
+                    <td style={{ padding: '12px 14px' }}>
+                      <div style={{ fontWeight: 600, fontSize: 13, fontFamily: 'monospace' }}>{lc.lcNumber}</div>
+                      <div style={{ fontSize: 11, color: 'var(--c-text3)' }}>{lc.initiatedBy?.name}</div>
+                    </td>
+                    <td style={{ padding: '12px 14px', fontSize: 13 }}>{lc.feeder}</td>
+                    <td style={{ padding: '12px 14px', fontSize: 13 }}>{lc.natureOfWork}</td>
+                    <td style={{ padding: '12px 14px' }}>
+                      <span style={{ fontSize: 11, padding: '2px 7px', borderRadius: 4, background: lc.workType === 'PLANNED' ? 'var(--c-primary-light)' : '#FFF7ED', color: lc.workType === 'PLANNED' ? 'var(--c-primary)' : 'var(--c-warning)', fontWeight: 500 }}>
+                        {lc.workType}
+                      </span>
+                    </td>
+                    <td style={{ padding: '12px 14px' }}><Badge status={lc.status} /></td>
+                    <td style={{ padding: '12px 14px', fontSize: 12, color: 'var(--c-text3)' }}>
+                      {new Date(lc.createdAt).toLocaleDateString('en-IN')}
+                    </td>
+                    <td style={{ padding: '12px 14px' }}>
+                      <Link to={`/lc/${lc._id}`} style={{ fontSize: 12, color: 'var(--c-primary)', fontWeight: 500 }}>View →</Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 

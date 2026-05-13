@@ -10,7 +10,9 @@ export function AuthProvider({ children }) {
 
   const fetchMe = useCallback(async () => {
     try {
-      const { data } = await authApi.me();
+      const promise = authApi.me();
+      const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 10000));
+      const { data } = await Promise.race([promise, timeout]);
       setUser(data.user);
     } catch {
       setUser(null);
@@ -27,6 +29,7 @@ export function AuthProvider({ children }) {
   const login = async (phone, password) => {
     const { data } = await authApi.login({ phone, password });
     localStorage.setItem('accessToken', data.accessToken);
+    localStorage.setItem('refreshToken', data.refreshToken);
     setUser(data.user);
     return data.user;
   };
@@ -34,6 +37,7 @@ export function AuthProvider({ children }) {
   const logout = async () => {
     try { await authApi.logout(); } catch {}
     localStorage.removeItem('accessToken');
+    localStorage.removeItem('refreshToken');
     setUser(null);
     toast.success('Logged out');
   };

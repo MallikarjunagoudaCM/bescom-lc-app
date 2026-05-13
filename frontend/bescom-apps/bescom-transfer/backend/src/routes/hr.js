@@ -1,0 +1,12 @@
+const router = require('express').Router();
+const { protect, authorize } = require('../middleware/auth');
+const { generateMeritList, getMeritList, processApplication, createCycle, getCycles, updateCycleStatus, getDashboardStats } = require('../controllers/hrController');
+const RL = authorize('hr_corporate');
+router.get('/dashboard', protect, RL, getDashboardStats);
+router.post('/cycles', protect, RL, createCycle);
+router.get('/cycles', protect, RL, getCycles);
+router.put('/cycles/:id/status', protect, RL, updateCycleStatus);
+router.post('/cycles/:cycleId/generate-merit', protect, RL, generateMeritList);
+router.get('/merit-list/:cycleId', protect, RL, getMeritList);
+router.put('/applications/:id/process', protect, RL, processApplication);
+module.exports = router;

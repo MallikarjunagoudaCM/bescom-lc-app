@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { userApi } from '../api/user.api';
-import { ROLES } from '../utils/constants';
+import { getRoleLabel } from '../utils/constants';
 import toast from 'react-hot-toast';
 
 const inp = { width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid var(--c-border)', fontSize: 13, background: 'var(--c-bg)', color: 'var(--c-text)', outline: 'none' };
@@ -203,27 +203,27 @@ export default function UsersPage() {
 
       <div style={{ background: 'var(--c-surface)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--c-border)', overflow: 'hidden' }}>
         {loading ? <div style={{ padding: '2rem', color: 'var(--c-text3)' }}>Loading...</div> : (
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ background: 'var(--c-surface2)', borderBottom: '1px solid var(--c-border)' }}>
-                {['Name', 'Email', 'Phone', 'Role', 'Division', 'Status', 'Actions'].map(h => (
-                  <th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: 'var(--c-text3)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
+          <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+            <table style={{ width: '100%', minWidth: 760, borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ background: 'var(--c-surface2)', borderBottom: '1px solid var(--c-border)' }}>
+                  {['Name', 'Role', 'Phone', 'Email', 'Status', 'Actions'].map(h => (
+                    <th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: 'var(--c-text3)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
               {filteredUsers.map((u, i) => (
                 <tr key={u._id} style={{ borderBottom: i < filteredUsers.length - 1 ? '1px solid var(--c-border)' : 'none' }}>
                   <td style={{ padding: '11px 14px' }}>
                     <div style={{ fontSize: 13, fontWeight: 500 }}>{u.name}</div>
                     <div style={{ marginTop: 4, fontSize: 12, color: 'var(--c-text3)' }}>{getLocation(u) || 'No location'}</div>
                   </td>
-                  <td style={{ padding: '11px 14px', fontSize: 12, color: 'var(--c-text3)' }}>{u.email}</td>
-                  <td style={{ padding: '11px 14px', fontSize: 12, color: 'var(--c-text3)' }}>{u.phone}</td>
                   <td style={{ padding: '11px 14px' }}>
-                    <span style={{ fontSize: 11, padding: '2px 7px', borderRadius: 4, background: 'var(--c-primary-light)', color: 'var(--c-primary)', fontWeight: 500 }}>{ROLES[u.role]}</span>
+                    <span style={{ fontSize: 11, padding: '2px 7px', borderRadius: 4, background: 'var(--c-primary-light)', color: 'var(--c-primary)', fontWeight: 500 }}>{getRoleLabel(u.role, u)}</span>
                   </td>
-                  <td style={{ padding: '11px 14px', fontSize: 12, color: 'var(--c-text3)' }}>{u.division || '—'}</td>
+                  <td style={{ padding: '11px 14px', fontSize: 12, color: 'var(--c-text3)' }}>{u.phone}</td>
+                  <td style={{ padding: '11px 14px', fontSize: 12, color: 'var(--c-text3)' }}>{u.email}</td>
                   <td style={{ padding: '11px 14px' }}>
                     <span style={{ fontSize: 11, padding: '2px 7px', borderRadius: 4, background: u.isActive ? 'var(--c-success-light)' : 'var(--c-danger-light)', color: u.isActive ? 'var(--c-success)' : 'var(--c-danger)', fontWeight: 500 }}>
                       {u.isActive ? 'Active' : 'Inactive'}
@@ -243,6 +243,7 @@ export default function UsersPage() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 
