@@ -1,14 +1,27 @@
 const User = require('../models/User.model');
 
 const parseCSV = (csvText) => {
+  if (!csvText || typeof csvText !== 'string') return [];
+
+  const cleanedText = csvText.replace(/\uFEFF/g, '');
+  const firstLine = cleanedText.split(/\r?\n/)[0] || '';
+  const delimiter = (() => {
+    const commaCount = (firstLine.match(/,/g) || []).length;
+    const semicolonCount = (firstLine.match(/;/g) || []).length;
+    const tabCount = (firstLine.match(/\t/g) || []).length;
+    if (tabCount >= commaCount && tabCount >= semicolonCount) return '\t';
+    if (semicolonCount >= commaCount) return ';';
+    return ',';
+  })();
+
   const rows = [];
   let row = [];
   let value = '';
   let inQuotes = false;
 
-  for (let i = 0; i < csvText.length; i++) {
-    const char = csvText[i];
-    const nextChar = csvText[i + 1];
+  for (let i = 0; i < cleanedText.length; i++) {
+    const char = cleanedText[i];
+    const nextChar = cleanedText[i + 1];
 
     if (char === '"') {
       if (inQuotes && nextChar === '"') {
@@ -20,7 +33,7 @@ const parseCSV = (csvText) => {
       continue;
     }
 
-    if (char === ',' && !inQuotes) {
+    if (char === delimiter && !inQuotes) {
       row.push(value.trim());
       value = '';
       continue;
@@ -90,11 +103,16 @@ exports.bulkImportOfficers = async (req, res) => {
         const aeName = getCsvValue(record, ['KPTCL AE', 'KPTCL AE Name', 'AE_KPTCL']);
         const aeMobile = getCsvValue(record, ['KPTCL AE Mobile', 'KPTCL AE Phone', 'AE Mobile', 'AE_KPTCL Mobile']);
         
+        // Check if this row has BESCOM SO details
+        const soName = getCsvValue(record, ['SO Name', 'SOName']);
+        const soMobile = getCsvValue(record, ['SO Mobile', 'SO Phone']);
+
         // Check for station using multiple column name variants
         const station = getCsvValue(record, ['Station', 'KPTCL Station', 'Station Name', 'KPTCL Substation', 'KPTCLSubstation']);
-        
-        // Row is KPTCL AE if it has KPTCL AE name and mobile (regardless of other fields)
-        const isKPTCLAE = !!(aeName && aeMobile);
+
+        // Treat as SO row when SO details are present, even if KPTCL AE columns also exist.
+        const isSoRow = !!(soName && soMobile);
+        const isKPTCLAE = !!(aeName && aeMobile) && !isSoRow;
 
         if (isKPTCLAE) {
           if (!aeName || !aeMobile) {
@@ -120,8 +138,8 @@ exports.bulkImportOfficers = async (req, res) => {
         }
 
         // Otherwise, treat as BESCOM officer row (if it has SO Mobile)
-        const soMobile = getCsvValue(record, ['SO Mobile', 'SO Phone']);
         if (soMobile) {
+          console.log(`Found SO row with mobile: ${soMobile}`);
           // Use getCsvValue for all field lookups to handle case-insensitive matching
           const eeMobile = getCsvValue(record, ['EE Mobile', 'EEMobile']);
           const eeName = getCsvValue(record, ['EE Name', 'EEName']);
@@ -184,6 +202,7 @@ exports.bulkImportOfficers = async (req, res) => {
           // Group SO feeders by phone so repeated rows merge
           if (soMobile && soName) {
             const phoneNum = normalizePhone(soMobile);
+            console.log(`Grouping SO: ${soName} (${phoneNum}), station: ${kptclSubstation}, feeders: ${feeders}`);
             if (!phoneNum) {
               results.errors.push({ row: rowIndex + 2, error: 'SO Mobile is invalid or empty' });
             } else {
@@ -196,8 +215,16 @@ exports.bulkImportOfficers = async (req, res) => {
                 subdivision,
                 section,
                 substation: kptclSubstation,
+                substations: new Set(),
                 feeders: new Set(),
               };
+
+              if (kptclSubstation) {
+                existingGroup.substations.add(kptclSubstation.trim());
+                if (!existingGroup.substation) {
+                  existingGroup.substation = kptclSubstation.trim();
+                }
+              }
 
               feederList.forEach(f => existingGroup.feeders.add(f));
               soGroups.set(phoneNum, existingGroup);
@@ -210,12 +237,19 @@ exports.bulkImportOfficers = async (req, res) => {
     }
 
     // Process BESCOM SO records
+    console.log('soGroups size:', soGroups.size);
     for (const [phoneNum, group] of soGroups.entries()) {
+      console.log(`Processing SO: ${group.name} (${phoneNum}), feeders:`, Array.from(group.feeders));
       if (!phoneNum) continue; // Skip if phone is invalid
       const existing = await User.findOne({ phone: phoneNum });
       const feederList = Array.from(group.feeders);
 
+      if (!group.substation && group.substations && group.substations.size > 0) {
+        group.substation = Array.from(group.substations)[0];
+      }
+
       if (!existing) {
+        console.log(`Creating new AE_BESCOM: ${group.name}`);
         await User.create({
           name: group.name,
           phone: phoneNum,
@@ -226,14 +260,31 @@ exports.bulkImportOfficers = async (req, res) => {
           subdivision: group.subdivision,
           section: group.section,
           substation: group.substation,
+          substations: Array.from(group.substations),
           feeders: feederList,
         });
         results.created++;
       } else {
         const existingFeeders = Array.isArray(existing.feeders) ? existing.feeders : [];
         const mergedFeeders = Array.from(new Set([...existingFeeders, ...feederList]));
+        let updated = false;
+
         if (mergedFeeders.length !== existingFeeders.length) {
           existing.feeders = mergedFeeders;
+          updated = true;
+        }
+
+        const existingSubstations = Array.isArray(existing.substations) ? existing.substations : [];
+        const mergedSubstations = Array.from(new Set([...(existingSubstations || []), ...Array.from(group.substations)]));
+        if (mergedSubstations.length !== existingSubstations.length) {
+          existing.substations = mergedSubstations;
+          if (!existing.substation && mergedSubstations.length > 0) {
+            existing.substation = mergedSubstations[0];
+          }
+          updated = true;
+        }
+
+        if (updated) {
           await existing.save();
           results.updated++;
         } else {

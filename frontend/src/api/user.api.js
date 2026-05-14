@@ -5,5 +5,6 @@ export const userApi = {
   update: (id, data) => api.patch(`/users/${id}`, data),
   delete: (id) => api.delete(`/users/${id}`),
   getLinemen: () => api.get('/users/linemen'),
+  getKptclStations: () => api.get('/users/kptcl-stations'),
   updateNotifPrefs: (data) => api.patch('/users/me/notifications', data),
 };

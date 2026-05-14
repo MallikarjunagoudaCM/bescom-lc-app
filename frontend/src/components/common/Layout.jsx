@@ -34,7 +34,7 @@ export default function Layout() {
     { to: '/', label: 'Dashboard', icon: '🏠', exact: true },
     { to: '/lc', label: 'Line Clears', icon: '⚡' },
     ...(user?.role === 'ADMIN' ? [{ to: '/admin', label: 'Admin', icon: '⚙️' }] : []),
-    ...(['ADMIN', 'AE_BESCOM', 'AE_KPTCL'].includes(user?.role) ? [{ to: '/users', label: user?.role === 'ADMIN' ? 'Users' : user?.role === 'AE_BESCOM' ? 'My Linemen' : 'My Shift JEs', icon: '👥' }] : []),
+    ...(['ADMIN', 'AE_BESCOM', 'AE_KPTCL'].includes(user?.role) ? [{ to: '/users', label: user?.role === 'ADMIN' ? 'Users' : user?.role === 'AE_BESCOM' ? 'My Line Staff' : 'My Shift JEs', icon: '👥' }] : []),
     ...(['ADMIN', 'AE_BESCOM', 'AE_KPTCL'].includes(user?.role) ? [{ to: '/register', label: 'Create User', icon: '➕' }] : []),
     { to: '/notifications', label: 'Notifications', icon: '🔔', badge: unread },
   ];

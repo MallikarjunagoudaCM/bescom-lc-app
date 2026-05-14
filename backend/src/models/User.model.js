@@ -13,6 +13,7 @@ const userSchema = new mongoose.Schema({
   subdivision: { type: String, trim: true },
   section: { type: String, trim: true },
   substation: { type: String, trim: true },
+  substations: [{ type: String, trim: true }],
   feeders: [{ type: String, trim: true }],
   station: { type: String, trim: true },
   shiftPattern: { type: String, enum: ['', 'WEEKLY', 'MONTHLY'], default: '' },

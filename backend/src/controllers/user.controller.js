@@ -162,6 +162,55 @@ exports.updateNotificationPrefs = async (req, res) => {
   res.json({ user, message: 'Notification preferences updated' });
 };
 
+exports.getKptclStations = async (req, res) => {
+  const user = req.user;
+  const query = { role: 'AE_BESCOM', isActive: true };
+  const stationFeedersMap = {};
+
+  if (user.role === 'AE_BESCOM') {
+    query._id = user._id;
+  } else {
+    const userStations = new Set();
+    if (user.substation) userStations.add(user.substation);
+    if (Array.isArray(user.substations)) user.substations.forEach(s => s && userStations.add(s));
+    if (user.station) userStations.add(user.station);
+
+    if (userStations.size > 0) {
+      const stationArray = Array.from(userStations);
+      query.$or = [
+        { substation: { $in: stationArray } },
+        { substations: { $in: stationArray } },
+      ];
+    }
+  }
+
+  const rows = await User.find(query).select('substation substations feeders').lean();
+
+  rows.forEach(row => {
+    const allStations = [];
+    if (Array.isArray(row.substations) && row.substations.length) {
+      allStations.push(...row.substations.map(s => s.trim()).filter(Boolean));
+    }
+    if (row.substation) {
+      const sub = row.substation.trim();
+      if (sub && !allStations.includes(sub)) allStations.push(sub);
+    }
+
+    const feeders = Array.isArray(row.feeders) ? row.feeders.map(f => f.trim()).filter(Boolean) : [];
+    allStations.forEach(station => {
+      if (!stationFeedersMap[station]) stationFeedersMap[station] = new Set();
+      feeders.forEach(feeder => stationFeedersMap[station].add(feeder));
+    });
+  });
+
+  const stationFeeders = {};
+  Object.keys(stationFeedersMap).sort().forEach(station => {
+    stationFeeders[station] = Array.from(stationFeedersMap[station]).sort();
+  });
+
+  res.json({ stationFeeders, stations: Object.keys(stationFeeders) });
+};
+
 exports.getLinemanList = async (req, res) => {
   const query = { role: 'LINEMAN', isActive: true };
 

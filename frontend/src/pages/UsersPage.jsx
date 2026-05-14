@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { userApi } from '../api/user.api';
-import { getRoleLabel } from '../utils/constants';
+import { getRoleLabel, ROLES } from '../utils/constants';
 import toast from 'react-hot-toast';
 
 const inp = { width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid var(--c-border)', fontSize: 13, background: 'var(--c-bg)', color: 'var(--c-text)', outline: 'none' };
@@ -28,9 +28,9 @@ export default function UsersPage() {
       // Filter users based on logged-in user's role
       let filtered = data.users;
       if (authUser.role === 'AE_BESCOM') {
-        // Show only linemen in the same section
+        // Show BESCOM line staff and JEs in the same section
         filtered = data.users.filter(u => 
-          u.role === 'LINEMAN' && 
+          ['LINEMAN', 'JE_BESCOM'].includes(u.role) && 
           u.division === authUser.division &&
           u.subdivision === authUser.subdivision &&
           u.section === authUser.section &&
@@ -150,9 +150,9 @@ export default function UsersPage() {
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
         <div>
           <h1 style={{ fontSize: 20, fontWeight: 700 }}>
-            {authUser?.role === 'AE_BESCOM' ? 'My Linemen' : authUser?.role === 'AE_KPTCL' ? 'My Shift JEs' : 'User Management'}
+            {authUser?.role === 'AE_BESCOM' ? 'My Line Staff' : authUser?.role === 'AE_KPTCL' ? 'My Shift JEs' : 'User Management'}
           </h1>
-          <p style={{ color: 'var(--c-text3)', fontSize: 13 }}>{filteredUsers.length} {authUser?.role === 'AE_BESCOM' ? 'linemen' : authUser?.role === 'AE_KPTCL' ? 'shift JEs' : 'users'}</p>
+          <p style={{ color: 'var(--c-text3)', fontSize: 13 }}>{filteredUsers.length} {authUser?.role === 'AE_BESCOM' ? 'line staff' : authUser?.role === 'AE_KPTCL' ? 'shift JEs' : 'users'}</p>
         </div>
         {authUser?.role === 'ADMIN' && (
           <button onClick={() => setShowForm(true)} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: 'var(--c-primary)', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>

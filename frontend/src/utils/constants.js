@@ -41,6 +41,13 @@ export const FEEDERS = [
   'Feeder-7 (Electronic City)', 'Feeder-8 (Hebbal)',
 ];
 
+export const STATION_FEEDERS = {
+  'Koramangala 66KV': ['Feeder-3 (Koramangala)', 'Feeder-4 (HSR Layout)'],
+  'Hebbal 110KV': ['Feeder-8 (Hebbal)', 'Feeder-2 (Whitefield)'],
+  'Electronic City 66KV': ['Feeder-7 (Electronic City)', 'Feeder-6 (Bannerghatta)'],
+  'Yelahanka 110KV': ['Feeder-1 (MG Road)', 'Feeder-5 (Indiranagar)'],
+};
+
 export const WORK_NATURES = [
   'Transformer Replacement', 'Cable Fault', 'Line Maintenance',
   'Pole Replacement', 'LT/HT Line Work', 'Capacitor Bank Work',

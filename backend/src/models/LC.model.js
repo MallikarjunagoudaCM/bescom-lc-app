@@ -59,6 +59,7 @@ const lcSchema = new mongoose.Schema({
   assignedLineman: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   releasedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
 
+  approvalPin: { type: String },
   // ─ Secret code (hashed in DB)
   secretCodeHash: { type: String, select: false },
 

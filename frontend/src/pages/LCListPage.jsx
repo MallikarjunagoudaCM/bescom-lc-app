@@ -26,6 +26,8 @@ export default function LCListPage() {
   const [formType, setFormType] = useState('UNPLANNED');
   const [filters, setFilters] = useState({ status: '', workType: '', page: 1 });
   const [feederOptions, setFeederOptions] = useState([]);
+  const [stationFeeders, setStationFeeders] = useState({});
+  const [stationFeedersLoaded, setStationFeedersLoaded] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -36,6 +38,17 @@ export default function LCListPage() {
       setLcs(data.lcs);
       setTotal(data.total);
     } catch {} finally { setLoading(false); }
+  };
+
+  const loadKptclStations = async () => {
+    try {
+      const { data } = await userApi.getKptclStations();
+      setStationFeeders(data.stationFeeders || {});
+    } catch {
+      setStationFeeders({});
+    } finally {
+      setStationFeedersLoaded(true);
+    }
   };
 
   useEffect(() => { load(); }, [filters]);
@@ -53,6 +66,7 @@ export default function LCListPage() {
     };
 
     loadFeederOptions();
+    if (user) loadKptclStations();
   }, [user]);
 
   const handleCreate = async (formData) => {
@@ -67,9 +81,9 @@ export default function LCListPage() {
   // Keep `feederOptions` state for linemen mapped through their AE
   const effectiveFeederOptions = Array.isArray(feederOptions) && feederOptions.length ? feederOptions : FEEDERS;
   const formDefaults = {
+    station: user?.station || '',
     section: user?.section || '',
-    substation: user?.substation || '',
-    feeder: effectiveFeederOptions[0] || '',
+    feeder: '',
   };
 
   const sel = { padding: '8px 12px', borderRadius: 8, border: '1px solid var(--c-border)', fontSize: 13, background: 'var(--c-surface)', color: 'var(--c-text)', cursor: 'pointer' };
@@ -169,7 +183,7 @@ export default function LCListPage() {
         </div>
       )}
 
-      {showForm && <LCFormModal workType={formType} onSubmit={handleCreate} onClose={() => setShowForm(false)} initialValues={formDefaults} feederOptions={effectiveFeederOptions} />}
+      {showForm && <LCFormModal workType={formType} onSubmit={handleCreate} onClose={() => setShowForm(false)} initialValues={formDefaults} feederOptions={effectiveFeederOptions} stationFeeders={stationFeeders} stationFeedersLoaded={stationFeedersLoaded} />}
     </div>
   );
 }

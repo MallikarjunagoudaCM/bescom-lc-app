@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
-import { FEEDERS, WORK_NATURES } from '../../utils/constants';
+import { FEEDERS, WORK_NATURES, STATION_FEEDERS } from '../../utils/constants';
 
 const inp = { width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid var(--c-border)', fontSize: 13, background: 'var(--c-bg)', color: 'var(--c-text)', outline: 'none' };
 
-export default function LCFormModal({ workType, onSubmit, onClose, initialValues = {}, feederOptions = FEEDERS }) {
+export default function LCFormModal({ workType, onSubmit, onClose, initialValues = {}, feederOptions = FEEDERS, stationFeeders = {}, stationFeedersLoaded = false }) {
   const [form, setForm] = useState(initialValues);
   const [loading, setLoading] = useState(false);
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
@@ -12,12 +12,19 @@ export default function LCFormModal({ workType, onSubmit, onClose, initialValues
     setForm(initialValues);
   }, [initialValues]);
 
+  const stationData = stationFeedersLoaded && Object.keys(stationFeeders || {}).length ? stationFeeders : STATION_FEEDERS;
+  const availableStationKeys = Object.keys(stationData).sort();
+  const selectedStation = form.station || '';
+  const availableFeeders = selectedStation
+    ? (stationData[selectedStation] ?? [])
+    : feederOptions;
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!form.feeder || !form.natureOfWork || !form.estimatedDuration) return alert('Please fill all required fields');
+    if (!form.station || !form.feeder || !form.natureOfWork || !form.estimatedDuration) return alert('Please fill all required fields');
     setLoading(true);
     try { await onSubmit(form); } finally { setLoading(false); }
-  };
+  }; 
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
@@ -30,10 +37,16 @@ export default function LCFormModal({ workType, onSubmit, onClose, initialValues
           <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--c-text3)' }}>✕</button>
         </div>
         <form onSubmit={handleSubmit} style={{ padding: '1.25rem 1.5rem' }}>
+          <Field label="KPTCL Station *">
+            <select value={form.station || ''} onChange={e => { set('station', e.target.value); set('feeder', ''); }} style={inp}>
+              <option value="">Select station...</option>
+              {availableStationKeys.map(station => <option key={station} value={station}>{station}</option>)}
+            </select>
+          </Field>
           <Field label="Feeder *">
-            <select value={form.feeder || ''} onChange={e => set('feeder', e.target.value)} style={inp}>
-              <option value="">Select feeder...</option>
-              {feederOptions.map(f => <option key={f}>{f}</option>)}
+            <select value={form.feeder || ''} onChange={e => set('feeder', e.target.value)} style={inp} disabled={!form.station}>
+              <option value="">{form.station ? 'Select feeder...' : 'Select station first'}</option>
+              {availableFeeders.map(f => <option key={f} value={f}>{f}</option>)}
             </select>
           </Field>
           <Field label="Nature of Work *">
@@ -44,9 +57,6 @@ export default function LCFormModal({ workType, onSubmit, onClose, initialValues
           </Field>
           <Field label="Section / Location">
             <input value={form.section || ''} onChange={e => set('section', e.target.value)} placeholder="e.g. Pole No. 45 to 52" style={inp} />
-          </Field>
-          <Field label="Substation">
-            <input value={form.substation || ''} onChange={e => set('substation', e.target.value)} placeholder="e.g. Koramangala 66/11kV" style={inp} />
           </Field>
           <Field label="Estimated Duration (hours) *">
             <input type="number" min={0.5} max={48} step={0.5} onChange={e => set('estimatedDuration', e.target.value)} placeholder="e.g. 4" style={inp} />

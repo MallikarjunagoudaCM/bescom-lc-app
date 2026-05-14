@@ -18,6 +18,22 @@ const addLog = (lc, action, user, remarks, secretCode) => {
 
 const generateCode = () => Math.floor(1000 + Math.random() * 9000).toString();
 
+const sanitizeLcForUser = (lc, user) => {
+  const obj = lc.toObject ? lc.toObject() : JSON.parse(JSON.stringify(lc));
+  const initiatedById = obj.initiatedBy?._id ? obj.initiatedBy._id.toString() : obj.initiatedBy?.toString?.();
+  const currentUserId = user?._id?.toString?.();
+  const isRequestor = initiatedById && currentUserId && initiatedById === currentUserId;
+
+  if (!isRequestor) {
+    delete obj.approvalPin;
+    if (Array.isArray(obj.log)) {
+      obj.log = obj.log.map(entry => ({ ...entry, secretCode: undefined }));
+    }
+  }
+
+  return obj;
+};
+
 const buildLCQuery = async (user, filters = {}) => {
   const { role, _id, division, subdivision, section, station } = user;
   const query = { ...filters };
@@ -123,7 +139,8 @@ exports.getById = async (req, res) => {
 // ─── POST /lc ─────────────────────────────────────────────────────────────────
 
 exports.create = async (req, res) => {
-  const { feeder, section, substation, natureOfWork, description, estimatedDuration, workType, plannedStartAt } = req.body;
+  const { feeder, section, substation: requestSubstation, station: requestStation, natureOfWork, description, estimatedDuration, workType, plannedStartAt } = req.body;
+  const substation = requestSubstation || requestStation;
 
   if (!feeder || !natureOfWork || !estimatedDuration) {
     return res.status(400).json({ error: 'feeder, natureOfWork, estimatedDuration are required' });
@@ -271,13 +288,12 @@ exports.approve = async (req, res) => {
     lc.approvedBy = req.user._id;
     lc.approvedAt = new Date();
     lc.approvalRemarks = remarks;
-    addLog(lc, `${userRole} approved (UNPLANNED LC)`, req.user, remarks);
+    lc.approvalPin = generateCode();
+    addLog(lc, `${userRole} approved (UNPLANNED LC)`, req.user, remarks, lc.approvalPin);
 
     await lc.save();
     const initiatorUser = await User.findById(lc.initiatedBy);
     notifSvc.notifyLCApproved(lc, initiatorUser).catch(console.error);
-
-    if (['LINEMAN', 'JE_BESCOM'].includes(initiator.role)) {
       const shiftJEs = await User.find({ role: 'SHIFT_JE_KPTCL', isActive: true });
       if (shiftJEs.length) {
         notifSvc.notify({
@@ -334,7 +350,8 @@ exports.approveEE = async (req, res) => {
   lc.approvedBy = req.user._id;
   lc.approvedAt = new Date();
   lc.approvalRemarks = remarks;
-  addLog(lc, 'EE approved (final approval for PLANNED LC)', req.user, remarks);
+  lc.approvalPin = generateCode();
+  addLog(lc, 'EE approved (final approval for PLANNED LC)', req.user, remarks, lc.approvalPin);
 
   await lc.save();
   const initiator2 = await User.findById(lc.initiatedBy);
