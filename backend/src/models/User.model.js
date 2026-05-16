@@ -15,6 +15,7 @@ const userSchema = new mongoose.Schema({
   substation: { type: String, trim: true },
   substations: [{ type: String, trim: true }],
   feeders: [{ type: String, trim: true }],
+  stationFeeders: { type: Map, of: [{ type: String, trim: true }] },
   station: { type: String, trim: true },
   shiftPattern: { type: String, enum: ['', 'WEEKLY', 'MONTHLY'], default: '' },
   maxShiftJEs: { type: Number, default: 0 },

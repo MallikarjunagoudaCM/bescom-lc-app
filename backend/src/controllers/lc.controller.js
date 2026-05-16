@@ -117,7 +117,8 @@ exports.getAll = async (req, res) => {
     LC.countDocuments(query),
   ]);
 
-  res.json({ lcs, total, page: Number(page), pages: Math.ceil(total / limit) });
+  const sanitizedLcs = lcs.map(lc => sanitizeLcForUser(lc, req.user));
+  res.json({ lcs: sanitizedLcs, total, page: Number(page), pages: Math.ceil(total / limit) });
 };
 
 // ─── GET /lc/:id ─────────────────────────────────────────────────────────────
@@ -133,7 +134,7 @@ exports.getById = async (req, res) => {
     .populate('log.performedBy', 'name phone');
 
   if (!lc) return res.status(404).json({ error: 'LC not found' });
-  res.json({ lc });
+  res.json({ lc: sanitizeLcForUser(lc, req.user) });
 };
 
 // ─── POST /lc ─────────────────────────────────────────────────────────────────
@@ -256,7 +257,15 @@ exports.approve = async (req, res) => {
     } else {
       return res.status(400).json({ error: `Cannot approve LC in status: ${lc.status}` });
     }
-  } else if (lc.workType === 'UNPLANNED') {
+
+    await lc.save();
+    const initiator = await User.findById(lc.initiatedBy);
+    notifSvc.notifyLCApproved(lc, initiator).catch(console.error);
+
+    return res.json({ lc: sanitizeLcForUser(lc, req.user), message: 'AEE approved - Awaiting EE approval' });
+  }
+
+  if (lc.workType === 'UNPLANNED') {
     if (lc.status !== 'INITIATED') {
       return res.status(400).json({ error: `Cannot approve UNPLANNED LC in status: ${lc.status}` });
     }
@@ -276,7 +285,6 @@ exports.approve = async (req, res) => {
       if (userRole !== 'AEE') {
         return res.status(403).json({ error: 'Only AEE can approve LC raised by AE_BESCOM' });
       }
-      // AEE can only approve AE_BESCOM in their own subdivision
       if (req.user.subdivision !== initiator.subdivision || req.user.division !== initiator.division) {
         return res.status(403).json({ error: 'AEE can only approve LCs from their own subdivision' });
       }
@@ -294,26 +302,22 @@ exports.approve = async (req, res) => {
     await lc.save();
     const initiatorUser = await User.findById(lc.initiatedBy);
     notifSvc.notifyLCApproved(lc, initiatorUser).catch(console.error);
-      const shiftJEs = await User.find({ role: 'SHIFT_JE_KPTCL', isActive: true });
-      if (shiftJEs.length) {
-        notifSvc.notify({
-          recipients: shiftJEs,
-          lc,
-          title: 'LC Approved by AE',
-          message: `LC ${lc.lcNumber} for ${lc.feeder} has been approved by AE_BESCOM. Please review and isolate CB.`,
-          type: 'ACTION_REQUIRED',
-        }).catch(console.error);
-      }
+
+    const shiftJEs = await User.find({ role: 'SHIFT_JE_KPTCL', isActive: true });
+    if (shiftJEs.length) {
+      notifSvc.notify({
+        recipients: shiftJEs,
+        lc,
+        title: 'LC Approved by AE',
+        message: `LC ${lc.lcNumber} for ${lc.feeder} has been approved by AE_BESCOM. Please review and isolate CB.`,
+        type: 'ACTION_REQUIRED',
+      }).catch(console.error);
     }
 
-    return res.json({ lc, message: 'LC approved and forwarded to JE review' });
+    return res.json({ lc: sanitizeLcForUser(lc, req.user), message: 'LC approved and forwarded to JE review' });
   }
 
-  await lc.save();
-  const initiator = await User.findById(lc.initiatedBy);
-  notifSvc.notifyLCApproved(lc, initiator).catch(console.error);
-
-  res.json({ lc, message: lc.workType === 'PLANNED' && lc.status !== 'APPROVED' ? 'AEE approved - Awaiting EE approval' : 'LC approved' });
+  return res.status(400).json({ error: 'Cannot approve LC at this stage' });
 };
 
 exports.approveEE = async (req, res) => {
@@ -357,7 +361,7 @@ exports.approveEE = async (req, res) => {
   const initiator2 = await User.findById(lc.initiatedBy);
   notifSvc.notifyLCApproved(lc, initiator2).catch(console.error);
 
-  res.json({ lc, message: 'EE approved - Ready for JE review' });
+  res.json({ lc: sanitizeLcForUser(lc, req.user), message: 'EE approved - Ready for JE review' });
 };
 
 // ─── PATCH /lc/:id/reject ─────────────────────────────────────────────────────
@@ -390,7 +394,7 @@ exports.reject = async (req, res) => {
   addLog(lc, 'LC rejected', req.user, req.body.reason);
   await lc.save();
 
-  res.json({ lc, message: 'LC rejected' });
+  res.json({ lc: sanitizeLcForUser(lc, req.user), message: 'LC rejected' });
 };
 
 // ─── PATCH /lc/:id/je-review ─────────────────────────────────────────────────
@@ -403,6 +407,18 @@ exports.jeReview = async (req, res) => {
   // Mandatory photos check
   if (!lc.photos.cbIsolation || lc.photos.cbIsolation.length < 2) {
     return res.status(400).json({ error: 'At least 2 CB isolation photos required' });
+  }
+
+  if (!lc.photos.earthRod || lc.photos.earthRod.length < 1) {
+    return res.status(400).json({ error: 'At least 1 Earth Rod photo required' });
+  }
+
+  if (!req.body.approvalPin) {
+    return res.status(400).json({ error: 'Approval PIN is required to issue this LC' });
+  }
+
+  if (lc.approvalPin !== req.body.approvalPin) {
+    return res.status(400).json({ error: 'Invalid approval PIN' });
   }
 
   // Generate & hash secret code
@@ -432,7 +448,7 @@ exports.jeReview = async (req, res) => {
 
     notifSvc.notifyDelegated(lc, initiatorUser).catch(console.error);
     notifSvc.notifyJEReviewed(lc, extraUsers).catch(console.error);
-    return res.json({ lc, secretCode: plainCode, message: 'CB isolated and work auto-assigned to requestor.' });
+    return res.json({ lc: sanitizeLcForUser(lc, req.user), secretCode: plainCode, message: 'CB isolated and work auto-assigned to requestor.' });
   }
 
   addLog(lc, 'CB isolated. JE reviewed. Secret code generated.', req.user, req.body.remarks, plainCode);
@@ -442,7 +458,7 @@ exports.jeReview = async (req, res) => {
   notifSvc.notifyJEReviewed(lc, [initiatorUser, ...extraUsers]).catch(console.error);
 
   // Return plain code only in this response — never stored in plain text
-  res.json({ lc, secretCode: plainCode, message: 'CB isolated. Secret code generated.' });
+  res.json({ lc: sanitizeLcForUser(lc, req.user), secretCode: plainCode, message: 'CB isolated. Secret code generated.' });
 };
 
 // ─── PATCH /lc/:id/delegate ──────────────────────────────────────────────────
@@ -456,7 +472,14 @@ exports.delegate = async (req, res) => {
   if (lc.status !== 'JE_REVIEWED') return res.status(400).json({ error: `Cannot delegate in status: ${lc.status}` });
 
   // Check if user can delegate - only the AE who initiated the LC can delegate
-  if (req.user._id.toString() !== lc.initiatedBy._id.toString() || !['AE_BESCOM', 'AE_KPTCL'].includes(lc.initiatedBy.role)) {
+  if (!lc.populated('initiatedBy')) {
+    await lc.populate('initiatedBy', 'role');
+  }
+
+  const initiatedById = lc.initiatedBy?._id ? lc.initiatedBy._id.toString() : lc.initiatedBy?.toString();
+  const initiatedByRole = lc.initiatedBy?.role;
+
+  if (!initiatedById || req.user._id.toString() !== initiatedById || !['AE_BESCOM', 'AE_KPTCL'].includes(initiatedByRole)) {
     return res.status(403).json({ error: 'Only the AE who initiated the LC can delegate' });
   }
 
@@ -471,7 +494,7 @@ exports.delegate = async (req, res) => {
 
   notifSvc.notifyDelegated(lc, lineman).catch(console.error);
 
-  res.json({ lc, message: 'Work delegated to lineman' });
+  res.json({ lc: sanitizeLcForUser(lc, req.user), message: 'Work delegated to lineman' });
 };
 
 // ─── PATCH /lc/:id/start-work ────────────────────────────────────────────────
@@ -501,7 +524,7 @@ exports.startWork = async (req, res) => {
   addLog(lc, 'Field work started. Secret code verified.', req.user, req.body.notes);
   await lc.save();
 
-  res.json({ lc, message: 'Work started successfully' });
+  res.json({ lc: sanitizeLcForUser(lc, req.user), message: 'Work started successfully' });
 };
 
 // ─── PATCH /lc/:id/complete-work ─────────────────────────────────────────────
@@ -523,7 +546,7 @@ exports.completeWork = async (req, res) => {
   const soUser = await User.findById(lc.initiatedBy);
   notifSvc.notifyWorkComplete(lc, soUser).catch(console.error);
 
-  res.json({ lc, message: 'Field work marked complete' });
+  res.json({ lc: sanitizeLcForUser(lc, req.user), message: 'Field work marked complete' });
 };
 
 // ─── PATCH /lc/:id/close-request ─────────────────────────────────────────────
@@ -548,15 +571,21 @@ exports.closeRequest = async (req, res) => {
   const jeUsers = await User.find({ role: 'JE_OPERATOR', isActive: true });
   notifSvc.notifyCloseRequested(lc, jeUsers).catch(console.error);
 
-  res.json({ lc, message: 'Close request submitted' });
+  res.json({ lc: sanitizeLcForUser(lc, req.user), message: 'Close request submitted' });
 };
 
 // ─── PATCH /lc/:id/release ────────────────────────────────────────────────────
 
 exports.release = async (req, res) => {
-  const lc = await LC.findById(req.params.id);
+  const { secretCode } = req.body;
+  if (!secretCode) return res.status(400).json({ error: 'Secret code required to energize' });
+
+  const lc = await LC.findById(req.params.id).select('+secretCodeHash');
   if (!lc) return res.status(404).json({ error: 'LC not found' });
   if (lc.status !== 'CLOSE_REQUESTED') return res.status(400).json({ error: `Cannot release in status: ${lc.status}` });
+
+  const valid = await bcrypt.compare(secretCode, lc.secretCodeHash);
+  if (!valid) return res.status(400).json({ error: 'Invalid secret code. Confirm with the LC requestor.' });
 
   if (!lc.photos.earthRemoved || lc.photos.earthRemoved.length < 1) {
     return res.status(400).json({ error: 'Earth removed photo required' });
@@ -582,14 +611,14 @@ exports.release = async (req, res) => {
   });
   notifSvc.notifyLCReleased(lc, stakeholders).catch(console.error);
 
-  res.json({ lc, message: 'LC released. Line energized.' });
+  res.json({ lc: sanitizeLcForUser(lc, req.user), message: 'LC released. Line energized.' });
 };
 
 // ─── POST /lc/:id/photos ──────────────────────────────────────────────────────
 
 exports.uploadPhotos = async (req, res) => {
   const { photoType } = req.body;
-  const allowedTypes = ['cbIsolation', 'fieldPreWork', 'fieldPostWork', 'earthRemoved', 'cbRestored'];
+  const allowedTypes = ['cbIsolation', 'earthRod', 'fieldPreWork', 'fieldPostWork', 'earthRemoved', 'cbRestored'];
 
   if (!allowedTypes.includes(photoType)) {
     return res.status(400).json({ error: `Invalid photoType. Allowed: ${allowedTypes.join(', ')}` });
@@ -616,6 +645,9 @@ exports.uploadPhotos = async (req, res) => {
     uploadedAt: new Date(),
   }));
 
+  if (!Array.isArray(lc.photos[photoType])) {
+    lc.photos[photoType] = [];
+  }
   lc.photos[photoType].push(...newPhotos);
   addLog(lc, `${newPhotos.length} photo(s) uploaded for stage: ${photoType}`, req.user);
   await lc.save();

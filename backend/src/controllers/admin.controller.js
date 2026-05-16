@@ -95,6 +95,7 @@ exports.bulkImportOfficers = async (req, res) => {
     const results = { created: 0, updated: 0, skipped: 0, errors: [] };
     const soGroups = new Map();
     const kptclAeByPhone = new Map();
+    const stationFeedersFromCsv = new Map();
 
     // First pass: detect and group rows
     for (const [rowIndex, record] of records.entries()) {
@@ -217,16 +218,31 @@ exports.bulkImportOfficers = async (req, res) => {
                 substation: kptclSubstation,
                 substations: new Set(),
                 feeders: new Set(),
+                stationFeeders: new Map(),
               };
 
               if (kptclSubstation) {
-                existingGroup.substations.add(kptclSubstation.trim());
+                const stationName = kptclSubstation.trim();
+                existingGroup.substations.add(stationName);
                 if (!existingGroup.substation) {
-                  existingGroup.substation = kptclSubstation.trim();
+                  existingGroup.substation = stationName;
                 }
+                const existingStationFeeders = existingGroup.stationFeeders.get(stationName) || new Set();
+                feederList.forEach(f => {
+                  const trimmed = f.trim();
+                  if (trimmed) {
+                    existingGroup.feeders.add(trimmed);
+                    existingStationFeeders.add(trimmed);
+                  }
+                });
+                existingGroup.stationFeeders.set(stationName, existingStationFeeders);
+              } else {
+                feederList.forEach(f => {
+                  const trimmed = f.trim();
+                  if (trimmed) existingGroup.feeders.add(trimmed);
+                });
               }
 
-              feederList.forEach(f => existingGroup.feeders.add(f));
               soGroups.set(phoneNum, existingGroup);
             }
           }
@@ -248,6 +264,12 @@ exports.bulkImportOfficers = async (req, res) => {
         group.substation = Array.from(group.substations)[0];
       }
 
+      const stationFeedersObj = Array.from(group.stationFeeders.entries()).reduce((acc, [station, feedersSet]) => {
+        const feederArray = Array.from(feedersSet).map(f => f.trim()).filter(Boolean);
+        if (feederArray.length) acc[station] = feederArray.sort();
+        return acc;
+      }, {});
+
       if (!existing) {
         console.log(`Creating new AE_BESCOM: ${group.name}`);
         await User.create({
@@ -262,15 +284,14 @@ exports.bulkImportOfficers = async (req, res) => {
           substation: group.substation,
           substations: Array.from(group.substations),
           feeders: feederList,
+          stationFeeders: stationFeedersObj,
         });
         results.created++;
       } else {
-        const existingFeeders = Array.isArray(existing.feeders) ? existing.feeders : [];
-        const mergedFeeders = Array.from(new Set([...existingFeeders, ...feederList]));
         let updated = false;
 
-        if (mergedFeeders.length !== existingFeeders.length) {
-          existing.feeders = mergedFeeders;
+        if (JSON.stringify(existing.feeders || []) !== JSON.stringify(feederList)) {
+          existing.feeders = feederList;
           updated = true;
         }
 
@@ -284,11 +305,56 @@ exports.bulkImportOfficers = async (req, res) => {
           updated = true;
         }
 
+        const existingStationFeeders = existing.stationFeeders || {};
+        const normalizedStationFeeders = Object.keys(stationFeedersObj).reduce((acc, station) => {
+          acc[station] = stationFeedersObj[station];
+          return acc;
+        }, {});
+
+        if (JSON.stringify(existingStationFeeders) !== JSON.stringify(normalizedStationFeeders)) {
+          existing.stationFeeders = normalizedStationFeeders;
+          updated = true;
+        }
+
         if (updated) {
           await existing.save();
           results.updated++;
         } else {
           results.skipped++;
+        }
+      }
+    }
+
+    // Cleanup stale feeder names for AE_BESCOM users by station
+    if (stationFeedersFromCsv.size > 0) {
+      const stations = Array.from(stationFeedersFromCsv.keys());
+      const aeUsersToClean = await User.find({
+        role: 'AE_BESCOM',
+        $or: [
+          { substation: { $in: stations } },
+          { substations: { $in: stations } },
+        ],
+      });
+
+      for (const user of aeUsersToClean) {
+        const userStations = new Set();
+        if (user.substation) userStations.add(user.substation.trim());
+        if (Array.isArray(user.substations)) user.substations.forEach(s => s && userStations.add(s.trim()));
+
+        const filteredFeeders = (user.feeders || []).filter(feeder => {
+          for (const station of userStations) {
+            const stationFeeders = stationFeedersFromCsv.get(station);
+            if (stationFeeders && stationFeeders.has(feeder)) {
+              return true;
+            }
+          }
+          return false;
+        });
+
+        if (JSON.stringify(filteredFeeders) !== JSON.stringify(user.feeders || [])) {
+          user.feeders = filteredFeeders;
+          await user.save();
+          results.updated++;
         }
       }
     }

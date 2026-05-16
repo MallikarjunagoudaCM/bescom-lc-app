@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "482607660564",
+    "project_id": "project-036986f6-aa49-49f8-aec",
+    "storage_bucket": "project-036986f6-aa49-49f8-aec.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:482607660564:android:f98f75cdd9c4c5fc57b101",
+        "android_client_info": {
+          "package_name": "com.bescom.lc"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBqVtONkI86Vh2-93j2IakOon7_tr5Vci8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

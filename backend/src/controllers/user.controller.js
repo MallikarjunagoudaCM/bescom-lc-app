@@ -169,6 +169,11 @@ exports.getKptclStations = async (req, res) => {
 
   if (user.role === 'AE_BESCOM') {
     query._id = user._id;
+  } else if (user.role === 'LINEMAN' || user.role === 'JE_BESCOM') {
+    // For linemen and JEs, scope to their own section's AE only
+    // so they only see feeders belonging to their section, not the whole substation
+    if (user.substation) query.substation = user.substation;
+    if (user.section) query.section = user.section;
   } else {
     const userStations = new Set();
     if (user.substation) userStations.add(user.substation);
@@ -184,7 +189,7 @@ exports.getKptclStations = async (req, res) => {
     }
   }
 
-  const rows = await User.find(query).select('substation substations feeders').lean();
+  const rows = await User.find(query).select('substation substations feeders stationFeeders').lean();
 
   rows.forEach(row => {
     const allStations = [];
@@ -196,11 +201,25 @@ exports.getKptclStations = async (req, res) => {
       if (sub && !allStations.includes(sub)) allStations.push(sub);
     }
 
-    const feeders = Array.isArray(row.feeders) ? row.feeders.map(f => f.trim()).filter(Boolean) : [];
-    allStations.forEach(station => {
-      if (!stationFeedersMap[station]) stationFeedersMap[station] = new Set();
-      feeders.forEach(feeder => stationFeedersMap[station].add(feeder));
-    });
+    const rowStationFeeders = row.stationFeeders && typeof row.stationFeeders === 'object'
+      ? row.stationFeeders
+      : null;
+
+    if (rowStationFeeders) {
+      Object.keys(rowStationFeeders).forEach(station => {
+        const feeders = Array.isArray(rowStationFeeders[station])
+          ? rowStationFeeders[station].map(f => f.trim()).filter(Boolean)
+          : [];
+        if (!stationFeedersMap[station]) stationFeedersMap[station] = new Set();
+        feeders.forEach(feeder => stationFeedersMap[station].add(feeder));
+      });
+    } else {
+      const feeders = Array.isArray(row.feeders) ? row.feeders.map(f => f.trim()).filter(Boolean) : [];
+      allStations.forEach(station => {
+        if (!stationFeedersMap[station]) stationFeedersMap[station] = new Set();
+        feeders.forEach(feeder => stationFeedersMap[station].add(feeder));
+      });
+    }
   });
 
   const stationFeeders = {};

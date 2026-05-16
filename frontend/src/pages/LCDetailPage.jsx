@@ -109,7 +109,11 @@ export default function LCDetailPage() {
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6, flexWrap: 'wrap' }}>
               <span style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 700, color: 'var(--c-primary)' }}>{lc.lcNumber}</span>
               <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 4, background: lc.workType === 'PLANNED' ? 'var(--c-primary-light)' : '#FFF7ED', color: lc.workType === 'PLANNED' ? 'var(--c-primary)' : 'var(--c-warning)', fontWeight: 500 }}>{lc.workType}</span>
-              <Badge status={status} />
+              {lc.workCompletedAt && status === 'IN_PROGRESS' ? (
+                <span style={{ fontSize: 12, padding: '4px 10px', borderRadius: 20, background: '#DBEAFE', color: '#1E40AF', fontWeight: 600 }}>✅ Work Completed - LC to be Returned</span>
+              ) : (
+                <Badge status={status} />
+              )}
             </div>
             <h1 style={{ fontSize: 18, fontWeight: 700, marginBottom: 2 }}>{lc.feeder}</h1>
             <p style={{ color: 'var(--c-text3)', fontSize: 13 }}>{lc.natureOfWork} · {lc.estimatedDuration}h estimated</p>
@@ -156,7 +160,12 @@ export default function LCDetailPage() {
                 </div>
               ))}
             </div>
-            {lc.description && (
+{lc.approvalPin && user?._id === lc.initiatedBy?._id?.toString() && (
+                <div style={{ marginTop: 12, padding: '12px', background: '#EFF6FF', borderRadius: 10, border: '1px solid #BFDBFE', fontSize: 13, color: '#1E40AF', fontWeight: 600 }}>
+                  🔑 Approval PIN: <span style={{ fontFamily: 'monospace', letterSpacing: '0.2em' }}>{lc.approvalPin}</span>
+                </div>
+              )}
+              {lc.description && (
               <div style={{ marginTop: 12, padding: '10px', background: 'var(--c-surface2)', borderRadius: 8, fontSize: 13, color: 'var(--c-text2)' }}>
                 {lc.description}
               </div>
@@ -170,7 +179,7 @@ export default function LCDetailPage() {
             return (
               <div key={type} style={{ background: 'var(--c-surface)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--c-border)', padding: '1.25rem', marginTop: 12 }}>
                 <h2 style={{ fontSize: 14, fontWeight: 600, marginBottom: 10 }}>
-                  {type === 'cbIsolation' ? '🔌 CB Isolation Photos' : type === 'fieldPreWork' ? '📸 Pre-Work Photos' : type === 'fieldPostWork' ? '✅ Post-Work Photos' : type === 'earthRemoved' ? '🌍 Earth Removed' : '⚡ CB Restored'}
+                  {type === 'cbIsolation' ? '🔌 CB Isolation Photos' : type === 'earthRod' ? '🪨 Earth Rod Photos' : type === 'fieldPreWork' ? '📸 Pre-Work Photos' : type === 'fieldPostWork' ? '✅ Post-Work Photos' : type === 'earthRemoved' ? '🌍 Earth Removed' : '⚡ CB Restored'}
                 </h2>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   {photos.map((p, i) => (
@@ -195,11 +204,7 @@ export default function LCDetailPage() {
                   </div>
                   <div style={{ fontSize: 13 }}>{entry.action}</div>
                   {entry.remarks && <div style={{ fontSize: 12, color: 'var(--c-text3)', marginTop: 2, fontStyle: 'italic' }}>{entry.remarks}</div>}
-                  {entry.secretCode && (() => {
-                    const isInitiator = user?._id === lc.initiatedBy?._id?.toString();
-                    console.log('Secret code check:', { userId: user?._id, initiatorId: lc.initiatedBy?._id?.toString(), isInitiator, secretCode: entry.secretCode });
-                    return isInitiator;
-                  })() && (
+                  {entry.secretCode && user?._id === lc.initiatedBy?._id?.toString() && (
                     <div style={{ fontSize: 12, color: 'var(--c-warning)', marginTop: 6, padding: '8px', background: '#FFFBEB', borderRadius: 6, border: '1px solid #FCD34D', fontWeight: 500 }}>
                       🔑 Secret Code: <span style={{ fontFamily: 'monospace', fontWeight: 700, letterSpacing: '0.15em' }}>{entry.secretCode}</span>
                     </div>
@@ -253,8 +258,19 @@ export default function LCDetailPage() {
 
           {/* ── JE REVIEW */}
           {canPerformAction(role, 'jeReview') && status === 'APPROVED' && (
-            <Section title="🔌 JE/Operator: Isolate CB">
+            <Section title="🔌 JE/Operator: Isolate CB and Earth Rod">
               <PhotoUpload lcId={id} photoType="cbIsolation" label="CB Isolation Photos (min 2 required)" minRequired={2} existing={lc.photos?.cbIsolation} onUploaded={reloadPhotos} />
+              <PhotoUpload lcId={id} photoType="earthRod" label="Earth Rod Photo (min 1 required)" minRequired={1} existing={lc.photos?.earthRod} onUploaded={reloadPhotos} />
+              <div style={{ marginBottom: 10 }}>
+                <label style={{ fontSize: 12, color: 'var(--c-text3)' }}>Approval PIN</label>
+                <input
+                  maxLength={4}
+                  value={form.approvalPin || ''}
+                  onChange={e => set('approvalPin', e.target.value)}
+                  placeholder="Enter 4-digit approval PIN"
+                  style={{ ...inp, marginTop: 4, fontSize: 16, letterSpacing: '0.3em' }}
+                />
+              </div>
               <div style={{ marginBottom: 10 }}>
                 <label style={{ fontSize: 12, color: 'var(--c-text3)' }}>Notify additional officers (optional)</label>
                 <input placeholder="Search and select users..." style={{ ...inp, marginTop: 4 }} onChange={e => set('notifyNote', e.target.value)} />
@@ -264,7 +280,9 @@ export default function LCDetailPage() {
               <ActionBtn label="Isolate CB & Generate Code" loading={acting} color="var(--c-primary)"
                 onClick={() => {
                   if ((lc.photos?.cbIsolation?.length || 0) < 2) return toast.error('Upload at least 2 CB isolation photos first');
-                  act('jeReview', { remarks: form.remarks });
+                  if ((lc.photos?.earthRod?.length || 0) < 1) return toast.error('Upload at least 1 Earth Rod photo first');
+                  if (!form.approvalPin || form.approvalPin.length !== 4) return toast.error('Enter the 4-digit approval PIN');
+                  act('jeReview', { remarks: form.remarks, approvalPin: form.approvalPin });
                 }} />
             </Section>
           )}
@@ -286,7 +304,7 @@ export default function LCDetailPage() {
           )}
 
           {/* ── START WORK (Lineman) */}
-          {role === 'LINEMAN' && status === 'DELEGATED' && (lc.assignedLineman?._id === user?._id || lc.assignedLineman === user?._id) && (
+          {role === 'LINEMAN' && status === 'DELEGATED' && (lc.assignedLineman?._id?.toString() === user?._id || lc.assignedLineman?.toString() === user?._id) && (
             <Section title="🔧 Start Field Work">
               <PhotoUpload lcId={id} photoType="fieldPreWork" label="Pre-Work Site Photos (min 1)" minRequired={1} existing={lc.photos?.fieldPreWork} onUploaded={reloadPhotos} />
               <label style={{ fontSize: 12, color: 'var(--c-text3)' }}>Enter 4-digit secret code</label>
@@ -302,7 +320,7 @@ export default function LCDetailPage() {
           )}
 
           {/* ── COMPLETE WORK */}
-          {canPerformAction(role, 'completeWork') && status === 'IN_PROGRESS' && (lc.assignedLineman?._id === user?._id || lc.assignedLineman === user?._id) && (
+          {canPerformAction(role, 'completeWork') && status === 'IN_PROGRESS' && !lc.workCompletedAt && (lc.assignedLineman?._id?.toString() === user?._id || lc.assignedLineman?.toString() === user?._id) && (
             <Section title="✅ Complete Field Work">
               <PhotoUpload lcId={id} photoType="fieldPostWork" label="Post-Work Photos (min 1)" minRequired={1} existing={lc.photos?.fieldPostWork} onUploaded={reloadPhotos} />
               <label style={{ fontSize: 12, color: 'var(--c-text3)' }}>Work completion notes</label>
@@ -315,8 +333,18 @@ export default function LCDetailPage() {
             </Section>
           )}
 
-          {/* ── CLOSE REQUEST */}
-          {canPerformAction(role, 'closeRequest') && status === 'IN_PROGRESS' && lc.workCompletedAt && (lc.assignedLineman?._id === user?._id || lc.assignedLineman === user?._id) && (
+          {/* ── WORK COMPLETED - AWAITING AE RETURN (only when lineman is NOT the requestor) */}
+          {lc.workCompletedAt && role === 'LINEMAN' &&
+            (lc.assignedLineman?._id?.toString() === user?._id || lc.assignedLineman?.toString() === user?._id) &&
+            lc.initiatedBy?._id?.toString() !== user?._id && lc.initiatedBy?.toString() !== user?._id && (
+            <div style={{ background: '#DBEAFE', border: '1px solid #93C5FD', borderRadius: 'var(--radius-lg)', padding: '1.25rem', marginTop: 12, textAlign: 'center' }}>
+              <div style={{ fontSize: 18, fontWeight: 700, color: '#1E40AF', marginBottom: 6 }}>✅ Work Completed</div>
+              <div style={{ fontSize: 13, color: '#1E3A8A' }}>Field work submitted. Awaiting AE confirmation to proceed with closure.</div>
+            </div>
+          )}
+
+          {/* ── CLOSE REQUEST (AE_BESCOM who initiated) */}
+          {canPerformAction(role, 'closeRequest') && status === 'IN_PROGRESS' && lc.workCompletedAt && role === 'AE_BESCOM' && lc.initiatedBy?._id?.toString() === user?._id && (
             <Section title="🔒 Submit Close Request">
               <label style={{ fontSize: 12, color: 'var(--c-text3)' }}>Re-enter secret code to authorize closure</label>
               <input maxLength={4} onChange={e => set('closeCode', e.target.value)} placeholder="_ _ _ _"
@@ -331,18 +359,36 @@ export default function LCDetailPage() {
             </Section>
           )}
 
+          {/* ── CLOSE REQUEST (Lineman who is also the LC requestor — closes directly) */}
+          {role === 'LINEMAN' && status === 'IN_PROGRESS' && lc.workCompletedAt &&
+            (lc.assignedLineman?._id?.toString() === user?._id || lc.assignedLineman?.toString() === user?._id) &&
+            (lc.initiatedBy?._id?.toString() === user?._id || lc.initiatedBy?.toString() === user?._id) && (
+            <Section title="🔒 Return LC (Close Request)">
+              <label style={{ fontSize: 12, color: 'var(--c-text3)' }}>Re-enter secret code to authorize return</label>
+              <input maxLength={4} onChange={e => set('closeCode', e.target.value)} placeholder="_ _ _ _"
+                style={{ ...inp, marginTop: 4, fontSize: 26, letterSpacing: '0.5em', textAlign: 'center' }} />
+              <label style={{ fontSize: 12, color: 'var(--c-text3)', marginTop: 10, display: 'block' }}>Clearance confirmation</label>
+              <textarea onChange={e => set('clearanceNote', e.target.value)} placeholder="Confirm area is clear and safe..." rows={2} style={{ ...inp, marginTop: 4, resize: 'vertical' }} />
+              <ActionBtn label="Submit Return LC Request" loading={acting} color="var(--c-purple)"
+                onClick={() => {
+                  if (!form.closeCode || form.closeCode.length !== 4) return toast.error('Enter 4-digit code');
+                  act('closeRequest', { secretCode: form.closeCode, clearanceNote: form.clearanceNote });
+                }} />
+            </Section>
+          )}
+
           {/* ── RELEASE (JE) */}
           {canPerformAction(role, 'release') && status === 'CLOSE_REQUESTED' && (
             <Section title="⚡ Release LC & Energize">
-              <PhotoUpload lcId={id} photoType="earthRemoved" label="Earth Removed Photo (required)" minRequired={1} existing={lc.photos?.earthRemoved} onUploaded={reloadPhotos} />
-              <PhotoUpload lcId={id} photoType="cbRestored" label="CB Restored Photo (required)" minRequired={1} existing={lc.photos?.cbRestored} onUploaded={reloadPhotos} />
-              <label style={{ fontSize: 12, color: 'var(--c-text3)' }}>Release remarks</label>
+              <label style={{ fontSize: 12, color: 'var(--c-text3)', marginTop: 10, display: 'block' }}>Secret code (confirm verbally with LC requestor)</label>
+              <input maxLength={4} onChange={e => set('releaseCode', e.target.value)} placeholder="_ _ _ _"
+                style={{ ...inp, marginTop: 4, fontSize: 26, letterSpacing: '0.5em', textAlign: 'center' }} />
+              <label style={{ fontSize: 12, color: 'var(--c-text3)', marginTop: 10, display: 'block' }}>Release remarks</label>
               <textarea onChange={e => set('remarks', e.target.value)} placeholder="Line restored and energized..." rows={2} style={{ ...inp, marginTop: 4, resize: 'vertical' }} />
-              <ActionBtn label="⚡ Release LC & Energize Line" loading={acting} color="#065F46"
+              <ActionBtn label="Release LC" loading={acting} color="#065F46"
                 onClick={() => {
-                  if ((lc.photos?.earthRemoved?.length || 0) < 1) return toast.error('Upload earth removed photo');
-                  if ((lc.photos?.cbRestored?.length || 0) < 1) return toast.error('Upload CB restored photo');
-                  act('release', { remarks: form.remarks });
+                  if (!form.releaseCode || form.releaseCode.length !== 4) return toast.error('Enter the 4-digit secret code');
+                  act('release', { secretCode: form.releaseCode, remarks: form.remarks });
                 }} />
             </Section>
           )}

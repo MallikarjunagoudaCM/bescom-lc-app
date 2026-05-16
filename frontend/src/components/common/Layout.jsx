@@ -1,33 +1,39 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { useEffect, useState } from 'react';
-import { notifApi } from '../../api/notification.api';
+import { useEffect, useState, useRef } from 'react';
+import { useNotifications } from '../../contexts/NotificationContext';
 import { getRoleLabel } from '../../utils/constants';
+
+const RefreshBtn = ({ spinning }) => (
+  <button
+    onClick={() => window.location.reload()}
+    title="Refresh"
+    style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 8, border: 'none', background: 'var(--c-primary)', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+  >
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"
+      style={{ animation: spinning ? 'ref-spin 0.6s linear infinite' : 'none', flexShrink: 0 }}>
+      <path d="M13.5 2.5A6.5 6.5 0 1 1 2.5 8" />
+      <path d="M13.5 2.5V6h-3.5" />
+      <style>{`@keyframes ref-spin { to { transform: rotate(360deg); } }`}</style>
+    </svg>
+    Refresh
+  </button>
+);
 
 export default function Layout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const [unread, setUnread] = useState(0);
+  const { unreadCount: unread } = useNotifications();
   const [menuOpen, setMenuOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const mainRef = useRef(null);
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768);
     handleResize();
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, []);
-
-  useEffect(() => {
-    const fetchUnread = async () => {
-      try {
-        const { data } = await notifApi.getAll({ unreadOnly: 'true', limit: 1 });
-        setUnread(data.unreadCount || 0);
-      } catch {}
-    };
-    fetchUnread();
-    const interval = setInterval(fetchUnread, 30000);
-    return () => clearInterval(interval);
   }, []);
 
   const navItems = [
@@ -60,9 +66,12 @@ export default function Layout() {
               <div style={{ fontSize: 11, color: 'var(--c-text3)' }}>Line Clear System</div>
             </div>
           </div>
-          <button onClick={logout} style={{ border: 'none', background: 'none', color: 'var(--c-text2)', fontSize: 13, cursor: 'pointer' }}>
-            Sign out
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <RefreshBtn spinning={refreshing} />
+            <button onClick={logout} style={{ border: 'none', background: 'none', color: 'var(--c-text2)', fontSize: 13, cursor: 'pointer' }}>
+              Sign out
+            </button>
+          </div>
         </header>
       )}
 
@@ -115,9 +124,11 @@ export default function Layout() {
           <div style={{ fontSize: 12, fontWeight: 600 }}>{user?.name}</div>
           <div style={{ fontSize: 11, color: 'var(--c-text3)', marginTop: 4 }}>{getLocation(user) || `${getRoleLabel(user?.role, user)} · ${user?.phone}`}</div>
           <div style={{ fontSize: 11, color: 'var(--c-text3)', marginBottom: 8 }}>{getLocation(user) ? `${getRoleLabel(user?.role, user)} · ${user?.phone}` : ''}</div>
-          <button onClick={logout} style={{ fontSize: 12, color: 'var(--c-text3)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
-            Sign out →
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button onClick={logout} style={{ fontSize: 12, color: 'var(--c-text3)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+              Sign out →
+            </button>
+          </div>
         </div>
       </aside>
 
@@ -125,7 +136,12 @@ export default function Layout() {
         <div onClick={closeMenu} style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.35)', zIndex: 25 }} />
       )}
 
-      <main style={{ flex: 1, overflow: 'auto', padding: isMobile ? '16px 14px 20px' : '24px 28px' }}>
+      <main ref={mainRef} style={{ flex: 1, overflow: 'auto', padding: isMobile ? '16px 14px 20px' : '24px 28px', position: 'relative' }}>
+        {!isMobile && (
+          <div style={{ position: 'absolute', top: 20, right: 24, zIndex: 10 }}>
+            <RefreshBtn spinning={refreshing} />
+          </div>
+        )}
         <Outlet />
       </main>
     </div>

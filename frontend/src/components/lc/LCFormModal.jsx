@@ -14,10 +14,12 @@ export default function LCFormModal({ workType, onSubmit, onClose, initialValues
 
   const stationData = stationFeedersLoaded && Object.keys(stationFeeders || {}).length ? stationFeeders : STATION_FEEDERS;
   const availableStationKeys = Object.keys(stationData).sort();
-  const selectedStation = form.station || '';
-  const availableFeeders = selectedStation
-    ? (stationData[selectedStation] ?? [])
-    : feederOptions;
+  const selectedStation = (form.station || '').trim();
+  const availableFeeders = selectedStation ? (stationData[selectedStation] ?? []) : [];
+  const showStationFeeders = Boolean(selectedStation);
+  const feederPlaceholder = showStationFeeders
+    ? (availableFeeders.length ? 'Select feeder...' : 'No feeders mapped for this station')
+    : 'Select station first';
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -38,14 +40,14 @@ export default function LCFormModal({ workType, onSubmit, onClose, initialValues
         </div>
         <form onSubmit={handleSubmit} style={{ padding: '1.25rem 1.5rem' }}>
           <Field label="KPTCL Station *">
-            <select value={form.station || ''} onChange={e => { set('station', e.target.value); set('feeder', ''); }} style={inp}>
+            <select value={form.station || ''} onChange={e => { set('station', e.target.value.trim()); set('feeder', ''); }} style={inp}>
               <option value="">Select station...</option>
               {availableStationKeys.map(station => <option key={station} value={station}>{station}</option>)}
             </select>
           </Field>
           <Field label="Feeder *">
-            <select value={form.feeder || ''} onChange={e => set('feeder', e.target.value)} style={inp} disabled={!form.station}>
-              <option value="">{form.station ? 'Select feeder...' : 'Select station first'}</option>
+            <select value={form.feeder || ''} onChange={e => set('feeder', e.target.value)} style={inp} disabled={!showStationFeeders || availableFeeders.length === 0}>
+              <option value="">{feederPlaceholder}</option>
               {availableFeeders.map(f => <option key={f} value={f}>{f}</option>)}
             </select>
           </Field>

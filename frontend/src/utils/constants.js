@@ -31,6 +31,7 @@ export const PHOTO_TYPES = {
   cbIsolation:   { label: 'CB Isolation Photos', required: 2, stages: ['APPROVED'] },
   fieldPreWork:  { label: 'Pre-Work Field Photos', required: 1, stages: ['DELEGATED'] },
   fieldPostWork: { label: 'Post-Work Field Photos', required: 1, stages: ['IN_PROGRESS'] },
+  earthRod:      { label: 'Earth Rod Photos', required: 1, stages: ['APPROVED'] },
   earthRemoved:  { label: 'Earth Removed Photos', required: 1, stages: ['CLOSE_REQUESTED'] },
   cbRestored:    { label: 'CB Restored Photos', required: 1, stages: ['CLOSE_REQUESTED'] },
 };

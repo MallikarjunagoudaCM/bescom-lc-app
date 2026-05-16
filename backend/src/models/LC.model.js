@@ -78,6 +78,7 @@ const lcSchema = new mongoose.Schema({
   // ─ Photos per stage
   photos: {
     cbIsolation:    [photoSchema],   // JE uploads: CB open, discharge rod, earth
+    earthRod:       [photoSchema],   // JE uploads: Earth rod
     fieldPreWork:   [photoSchema],   // Lineman uploads before work
     fieldPostWork:  [photoSchema],   // Lineman uploads after work
     earthRemoved:   [photoSchema],   // JE uploads: earth removed
