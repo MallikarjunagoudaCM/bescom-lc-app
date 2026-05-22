@@ -60,11 +60,12 @@ const notify = async ({ recipients, lc, title, message, type = 'INFO' }) => {
 module.exports = {
   notify,
   notifyLCInitiated: (lc, approvers) => notify({ recipients: approvers, lc, title: 'New LC Request', message: `New ${lc.workType} LC for ${lc.feeder}. Please approve.`, type: 'ACTION_REQUIRED' }),
-  notifyLCApproved: (lc, user) => notify({ recipients: [user], lc, title: 'LC Approved', message: `Your LC for ${lc.feeder} is approved. Awaiting JE review.`, type: 'INFO' }),
-  notifyJEReviewed: (lc, users) => notify({ recipients: users, lc, title: 'CB Isolated - LC Active', message: `CB isolated for ${lc.feeder}. Secret code generated. Assign to lineman.`, type: 'ACTION_REQUIRED' }),
+  notifyLCApproved: (lc, user) => notify({ recipients: [user], lc, title: 'LC Approved', message: `Your LC for ${lc.feeder} is approved. Awaiting LC issuance.`, type: 'INFO' }),
+  notifyJEReviewed: (lc, users) => notify({ recipients: users, lc, title: 'LC Issued - Action Required', message: `LC Issued for ${lc.feeder}. Secret code generated. Assign to lineman.`, type: 'ACTION_REQUIRED' }),
   notifyDelegated: (lc, user) => notify({ recipients: [user], lc, title: 'Work Assigned', message: `You are assigned to ${lc.feeder}. Get secret code from your SO.`, type: 'ACTION_REQUIRED' }),
   notifyWorkComplete: (lc, user) => notify({ recipients: [user], lc, title: 'Field Work Complete', message: `Work done on ${lc.feeder}. Submit close request.`, type: 'ACTION_REQUIRED' }),
   notifyCloseRequested: (lc, users) => notify({ recipients: users, lc, title: 'Close Request', message: `${lc.feeder} area cleared. Remove earth and restore CB.`, type: 'ACTION_REQUIRED' }),
-  notifyLCReleased: (lc, users) => notify({ recipients: users, lc, title: 'LC Released - Line Energized', message: `LC ${lc.lcNumber} closed. ${lc.feeder} is energized.`, type: 'SUCCESS' }),
+  notifyLCReleased: (lc, users) => notify({ recipients: users, lc, title: 'LC Released - Awaiting Feeder Energization', message: `LC ${lc.lcNumber} released for ${lc.feeder}. Feeder energization pending final clearance.`, type: 'INFO' }),
+  notifyFeederEnergized: (lc, users) => notify({ recipients: users, lc, title: 'Feeder Energized', message: `${lc.feeder} energized after all pending LCs were cleared.`, type: 'SUCCESS' }),
   notifyLCDelegated: (lc, shiftJEs) => notify({ recipients: shiftJEs, lc, title: 'LC Delegated', message: `LC ${lc.lcNumber} delegated for ${lc.natureOfWork}. Review and take action.`, type: 'ACTION_REQUIRED' }),
 };

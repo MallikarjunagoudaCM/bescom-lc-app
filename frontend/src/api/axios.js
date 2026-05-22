@@ -20,15 +20,20 @@ let queue = [];
 
 api.interceptors.response.use(res => res, async err => {
   const orig = err.config;
-  if (err.response?.status === 401 && !orig._retry) {
+  const requestUrl = orig?.url || '';
+  const isLoginRequest = requestUrl.includes('/auth/login');
+  if (err.response?.status === 401 && !orig?._retry && !isLoginRequest) {
     if (refreshing) {
       return new Promise((resolve, reject) => queue.push({ resolve, reject }))
         .then(token => { orig.headers.Authorization = `Bearer ${token}`; return api(orig); });
     }
+    const refreshToken = localStorage.getItem('refreshToken');
+    if (!refreshToken) {
+      return Promise.reject(err);
+    }
     orig._retry = true;
     refreshing = true;
     try {
-      const refreshToken = localStorage.getItem('refreshToken');
       const { data } = await api.post('/auth/refresh', { refreshToken }, { withCredentials: true, timeout: 5000 });
       localStorage.setItem('accessToken', data.accessToken);
       localStorage.setItem('refreshToken', data.refreshToken);

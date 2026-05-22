@@ -29,6 +29,7 @@ const LC_STATUSES = [
   'IN_PROGRESS',
   'CLOSE_REQUESTED',
   'RELEASED',
+  'ENERGIZED',
   'REJECTED',
 ];
 
@@ -58,6 +59,7 @@ const lcSchema = new mongoose.Schema({
   jeReviewedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   assignedLineman: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   releasedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  energizedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
 
   approvalPin: { type: String },
   // ─ Secret code (hashed in DB)
@@ -73,6 +75,7 @@ const lcSchema = new mongoose.Schema({
   workCompletedAt: Date,
   closeRequestedAt: Date,
   releasedAt: Date,
+  energizedAt: Date,
   actualDuration: Number,
 
   // ─ Photos per stage
@@ -94,6 +97,7 @@ const lcSchema = new mongoose.Schema({
   fieldNotes: String,
   clearanceNote: String,
   releaseRemarks: String,
+  energizeRemarks: String,
   rejectionReason: String,
 
   // ─ Activity log

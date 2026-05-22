@@ -2,7 +2,7 @@ import { useState, useRef } from 'react';
 import { lcApi } from '../../api/lc.api';
 import toast from 'react-hot-toast';
 
-export default function PhotoUpload({ lcId, photoType, label, minRequired = 1, existing = [], onUploaded }) {
+export default function PhotoUpload({ lcId, photoType, label, minRequired = 1, existing = [], onUploaded, pinValidated = true }) {
   const [uploading, setUploading] = useState(false);
   const [preview, setPreview] = useState([]);
   const inputRef = useRef();
@@ -46,9 +46,15 @@ export default function PhotoUpload({ lcId, photoType, label, minRequired = 1, e
       {/* Upload button */}
       <input ref={inputRef} type="file" accept="image/*" multiple style={{ display: 'none' }}
         onChange={e => handleFiles(e.target.files)} />
-      <button type="button" onClick={() => inputRef.current.click()} disabled={uploading}
-        style={{ width: '100%', padding: '8px', borderRadius: 8, border: `1.5px dashed ${satisfied ? 'var(--c-border)' : 'var(--c-danger)'}`, background: 'var(--c-surface2)', fontSize: 12, color: 'var(--c-text3)', cursor: uploading ? 'not-allowed' : 'pointer' }}>
-        {uploading ? 'Uploading...' : `+ Upload Photos ${!satisfied ? '(required)' : '(add more)'}`}
+      <button type="button" onClick={() => {
+        if (!pinValidated) {
+          toast.error('Validate the Section Officer\'s PIN before uploading photos');
+          return;
+        }
+        inputRef.current.click();
+      }} disabled={uploading || !pinValidated}
+        style={{ width: '100%', padding: '8px', borderRadius: 8, border: `1.5px dashed ${satisfied ? 'var(--c-border)' : 'var(--c-danger)'}`, background: pinValidated ? 'var(--c-surface2)' : 'var(--c-surface2)', opacity: pinValidated ? 1 : 0.6, fontSize: 12, color: 'var(--c-text3)', cursor: (uploading || !pinValidated) ? 'not-allowed' : 'pointer' }}>
+        {uploading ? 'Uploading...' : !pinValidated ? 'Validate PIN first' : `+ Upload Photos ${!satisfied ? '(required)' : '(add more)'}`}
       </button>
     </div>
   );

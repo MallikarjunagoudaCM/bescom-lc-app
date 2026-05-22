@@ -19,11 +19,12 @@ export const getRoleLabel = (role, user) => {
 export const STAGES = [
   { key: 'INITIATED',       label: 'Initiated',       icon: '📋', color: '#4338CA', bg: '#EEF2FF' },
   { key: 'APPROVED',        label: 'Approved',         icon: '✅', color: '#15803D', bg: '#F0FDF4' },
-  { key: 'JE_REVIEWED',     label: 'JE Reviewed',      icon: '🔌', color: '#1D4ED8', bg: '#EFF6FF' },
+  { key: 'JE_REVIEWED',     label: 'LC Issued',        icon: '🔌', color: '#1D4ED8', bg: '#EFF6FF' },
   { key: 'DELEGATED',       label: 'Delegated',        icon: '👷', color: '#C2410C', bg: '#FFF7ED' },
   { key: 'IN_PROGRESS',     label: 'In Progress',      icon: '🔧', color: '#B45309', bg: '#FFFBEB' },
   { key: 'CLOSE_REQUESTED', label: 'Close Requested',  icon: '🔒', color: '#7E22CE', bg: '#FDF4FF' },
   { key: 'RELEASED',        label: 'Released',         icon: '⚡', color: '#065F46', bg: '#F0FDF4' },
+  { key: 'ENERGIZED',       label: 'Feeder Energized', icon: '⚡', color: '#14532D', bg: '#DCFCE7' },
   { key: 'REJECTED',        label: 'Rejected',         icon: '❌', color: '#B91C1C', bg: '#FEF2F2' },
 ];
 
@@ -65,6 +66,7 @@ export const canPerformAction = (role, action) => {
     completeWork:  ['AE_BESCOM', 'LINEMAN', 'ADMIN'],
     closeRequest:  ['AE_BESCOM', 'LINEMAN', 'ADMIN'],
     release:       ['SHIFT_JE_KPTCL', 'ADMIN'],
+    energizeFeeder:['SHIFT_JE_KPTCL', 'ADMIN'],
     createLC:      ['AE_BESCOM', 'JE_BESCOM', 'LINEMAN', 'ADMIN'],
   };
   return permissions[action]?.includes(role) || false;

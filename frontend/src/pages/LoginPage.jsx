@@ -11,10 +11,16 @@ export default function LoginPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!form.phone || !form.password) return toast.error('Please fill all fields');
+    const phone = (form.phone || '').replace(/\D/g, '');
+    const password = form.password || '';
+
+    if (!phone || !password) return toast.error('Please fill all fields');
+    if (!/^\d{10}$/.test(phone)) return toast.error('Enter a valid 10-digit mobile number');
+    if (password.length < 6) return toast.error('Enter a valid password');
+
     setLoading(true);
     try {
-      await login(form.phone, form.password);
+      await login(phone, password);
       toast.success('Welcome back!');
       navigate('/');
     } catch (err) {
@@ -39,7 +45,7 @@ export default function LoginPage() {
           <form onSubmit={handleSubmit}>
             <div style={{ marginBottom: 14 }}>
               <label style={{ fontSize: 12, fontWeight: 500, color: 'var(--c-text2)', display: 'block', marginBottom: 4 }}>Mobile Number</label>
-              <input type="tel" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
+              <input type="tel" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value.replace(/\D/g, '').slice(0, 10) }))}
                 placeholder="9999999999" style={inp} />
             </div>
             <div style={{ marginBottom: 20 }}>

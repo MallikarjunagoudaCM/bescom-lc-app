@@ -3,8 +3,10 @@ const User = require('../models/User.model');
 const { generateTokens, setRefreshCookie } = require('../services/auth.service');
 
 exports.login = async (req, res) => {
-  const { phone, password } = req.body;
+  const phone = String(req.body?.phone || '').trim();
+  const password = String(req.body?.password || '');
   if (!phone || !password) return res.status(400).json({ error: 'Phone and password required' });
+  if (!/^\d{10}$/.test(phone)) return res.status(400).json({ error: 'Enter a valid 10-digit mobile number' });
 
   const user = await User.findOne({ phone }).select('+password');
   if (!user || !user.isActive) return res.status(401).json({ error: 'Invalid credentials' });

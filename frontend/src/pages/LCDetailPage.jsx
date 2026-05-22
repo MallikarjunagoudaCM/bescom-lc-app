@@ -37,6 +37,9 @@ export default function LCDetailPage() {
   const [linemen, setLinemen] = useState([]);
   const [secretCode, setSecretCode] = useState(null); // shown once on JE review
   const [form, setForm] = useState({});
+  const [pinChecking, setPinChecking] = useState(false);
+  const [releaseChecking, setReleaseChecking] = useState(false);
+  const [energizeReadiness, setEnergizeReadiness] = useState({ loading: false, canEnergize: false, pendingCount: 0, pendingLcs: [], reason: '' });
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
@@ -45,6 +48,36 @@ export default function LCDetailPage() {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  useEffect(() => {
+    const shouldCheck = canPerformAction(user?.role, 'energizeFeeder') && lc?.status === 'RELEASED';
+    if (!shouldCheck) {
+      setEnergizeReadiness({ loading: false, canEnergize: false, pendingCount: 0, pendingLcs: [], reason: '' });
+      return;
+    }
+
+    let active = true;
+    const loadReadiness = async () => {
+      try {
+        setEnergizeReadiness(s => ({ ...s, loading: true }));
+        const { data } = await lcApi.getEnergizeReadiness(id);
+        if (!active) return;
+        setEnergizeReadiness({
+          loading: false,
+          canEnergize: !!data.canEnergize,
+          pendingCount: data.pendingCount || 0,
+          pendingLcs: data.pendingLcs || [],
+          reason: data.reason || '',
+        });
+      } catch {
+        if (!active) return;
+        setEnergizeReadiness({ loading: false, canEnergize: false, pendingCount: 0, pendingLcs: [], reason: 'Unable to verify feeder readiness' });
+      }
+    };
+
+    loadReadiness();
+    return () => { active = false; };
+  }, [id, lc?.status, user?.role]);
 
   const load = async () => {
     try {
@@ -78,6 +111,7 @@ export default function LCDetailPage() {
         case 'completeWork': res = await lcApi.completeWork(id, data); break;
         case 'closeRequest': res = await lcApi.closeRequest(id, data); break;
         case 'release': res = await lcApi.release(id, data); break;
+        case 'energizeFeeder': res = await lcApi.energizeFeeder(id, data); break;
       }
       toast.success(res.data.message);
       setLc(res.data.lc);
@@ -88,6 +122,53 @@ export default function LCDetailPage() {
   const reloadPhotos = async () => {
     const { data } = await lcApi.getById(id);
     setLc(data.lc);
+  };
+
+  const validatePin = async () => {
+    if (!form.callConfirmed) return toast.error('Please confirm the call with Section Officer before validating PIN');
+    if (!form.approvalPin || form.approvalPin.length !== 4) return toast.error("Enter the 4-digit Section Officer's Approval PIN");
+    try {
+      setPinChecking(true);
+      await lcApi.validatePin(id, { approvalPin: form.approvalPin });
+      toast.success("PIN is valid");
+      set('pinValid', true);
+    } catch (err) {
+      toast.error(err?.response?.data?.error || 'Invalid PIN');
+      set('pinValid', false);
+    } finally {
+      setPinChecking(false);
+    }
+  };
+
+  const validateReleaseCode = async () => {
+    if (!form.releaseConfirmed) return toast.error('Please confirm with Section officer before validating PIN');
+    if (!form.releaseCode || form.releaseCode.length !== 4) return toast.error('Enter the 4-digit secret code');
+    try {
+      setReleaseChecking(true);
+      await lcApi.validateReleaseCode(id, { secretCode: form.releaseCode });
+      toast.success('PIN is valid');
+      set('releaseCodeValid', true);
+    } catch (err) {
+      toast.error(err?.response?.data?.error || 'Invalid PIN');
+      set('releaseCodeValid', false);
+    } finally {
+      setReleaseChecking(false);
+    }
+  };
+
+  const validateSecretCode = async () => {
+    if (!form.secretCode || form.secretCode.length !== 4) return toast.error('Enter 4-digit secret code');
+    try {
+      setPinChecking(true);
+      await lcApi.validateSecretCode(id, { secretCode: form.secretCode });
+      toast.success('Secret code is valid');
+      set('secretCodeValid', true);
+    } catch (err) {
+      toast.error(err?.response?.data?.error || 'Invalid secret code');
+      set('secretCodeValid', false);
+    } finally {
+      setPinChecking(false);
+    }
   };
 
   if (loading) return <div style={{ padding: '2rem', color: 'var(--c-text3)' }}>Loading...</div>;
@@ -122,14 +203,14 @@ export default function LCDetailPage() {
 
         {/* Progress */}
         <div style={{ display: 'flex', gap: 4, marginTop: 16, flexWrap: 'wrap' }}>
-          {STAGES.filter(s => s.key !== 'REJECTED').map((s, i) => {
+          {STAGES.filter(s => s.key !== 'REJECTED').map((s, i, arr) => {
             const done = STAGES.findIndex(x => x.key === status) >= i;
             return (
               <div key={s.key} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                 <div title={s.label} style={{ width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, background: done ? 'var(--c-primary)' : 'var(--c-surface2)', color: done ? '#fff' : 'var(--c-text3)', border: `1px solid ${done ? 'var(--c-primary)' : 'var(--c-border)'}`, transition: 'all 0.3s' }}>
                   {i + 1}
                 </div>
-                {i < 6 && <div style={{ width: 24, height: 2, background: done && i < stageIdx ? 'var(--c-primary)' : 'var(--c-border)' }} />}
+                {i < arr.length - 1 && <div style={{ width: 24, height: 2, background: done && i < stageIdx ? 'var(--c-primary)' : 'var(--c-border)' }} />}
               </div>
             );
           })}
@@ -160,9 +241,9 @@ export default function LCDetailPage() {
                 </div>
               ))}
             </div>
-{lc.approvalPin && user?._id === lc.initiatedBy?._id?.toString() && (
+              {lc.approvalPin && user?._id === lc.initiatedBy?._id?.toString() && (
                 <div style={{ marginTop: 12, padding: '12px', background: '#EFF6FF', borderRadius: 10, border: '1px solid #BFDBFE', fontSize: 13, color: '#1E40AF', fontWeight: 600 }}>
-                  🔑 Approval PIN: <span style={{ fontFamily: 'monospace', letterSpacing: '0.2em' }}>{lc.approvalPin}</span>
+                  🔑 Section Officer's Approval PIN: <span style={{ fontFamily: 'monospace', letterSpacing: '0.2em' }}>{lc.approvalPin}</span>
                 </div>
               )}
               {lc.description && (
@@ -259,18 +340,35 @@ export default function LCDetailPage() {
           {/* ── JE REVIEW */}
           {canPerformAction(role, 'jeReview') && status === 'APPROVED' && (
             <Section title="🔌 JE/Operator: Isolate CB and Earth Rod">
-              <PhotoUpload lcId={id} photoType="cbIsolation" label="CB Isolation Photos (min 2 required)" minRequired={2} existing={lc.photos?.cbIsolation} onUploaded={reloadPhotos} />
-              <PhotoUpload lcId={id} photoType="earthRod" label="Earth Rod Photo (min 1 required)" minRequired={1} existing={lc.photos?.earthRod} onUploaded={reloadPhotos} />
               <div style={{ marginBottom: 10 }}>
-                <label style={{ fontSize: 12, color: 'var(--c-text3)' }}>Approval PIN</label>
+                <label style={{ fontSize: 12, color: 'var(--c-text3)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <input type="checkbox" checked={!!form.callConfirmed} onChange={e => set('callConfirmed', e.target.checked)} style={{ width: 16, height: 16 }} />
+                  <span style={{ fontWeight: 700, color: 'var(--c-primary)', background: 'rgba(14,165,233,0.08)', padding: '2px 6px', borderRadius: 6 }}>
+                    Feeder confirmation over phone call with Section Officer for LC?
+                  </span>
+                </label>
+              </div>
+              <div style={{ marginBottom: 10 }}>
+                <label style={{ fontSize: 12, color: 'var(--c-text3)' }}>Section Officer's Approval PIN</label>
                 <input
                   maxLength={4}
                   value={form.approvalPin || ''}
-                  onChange={e => set('approvalPin', e.target.value)}
-                  placeholder="Enter 4-digit approval PIN"
+                  onChange={e => {
+                    set('approvalPin', e.target.value);
+                    set('pinValid', false);
+                  }}
+                  placeholder="Enter 4-digit Section Officer's Approval PIN"
                   style={{ ...inp, marginTop: 4, fontSize: 16, letterSpacing: '0.3em' }}
                 />
+                <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <button onClick={validatePin} disabled={pinChecking || !form.callConfirmed} style={{ padding: '8px 12px', borderRadius: 6, border: 'none', background: (pinChecking || !form.callConfirmed) ? 'var(--c-text3)' : 'var(--c-primary)', color: '#fff', cursor: (pinChecking || !form.callConfirmed) ? 'not-allowed' : 'pointer' }}>
+                    {pinChecking ? 'Validating...' : 'Validate PIN'}
+                  </button>
+                  {form.pinValid && <div style={{ color: 'var(--c-success)', fontWeight: 600 }}>PIN valid</div>}
+                </div>
               </div>
+              <PhotoUpload lcId={id} photoType="cbIsolation" label="CB Isolation Photos (min 2 required)" minRequired={2} existing={lc.photos?.cbIsolation} onUploaded={reloadPhotos} pinValidated={!!form.pinValid} />
+              <PhotoUpload lcId={id} photoType="earthRod" label="Earth Rod Photo (min 1 required)" minRequired={1} existing={lc.photos?.earthRod} onUploaded={reloadPhotos} pinValidated={!!form.pinValid} />
               <div style={{ marginBottom: 10 }}>
                 <label style={{ fontSize: 12, color: 'var(--c-text3)' }}>Notify additional officers (optional)</label>
                 <input placeholder="Search and select users..." style={{ ...inp, marginTop: 4 }} onChange={e => set('notifyNote', e.target.value)} />
@@ -279,9 +377,11 @@ export default function LCDetailPage() {
               <textarea onChange={e => set('remarks', e.target.value)} placeholder="JE remarks..." rows={2} style={{ ...inp, marginTop: 4, resize: 'vertical' }} />
               <ActionBtn label="Isolate CB & Generate Code" loading={acting} color="var(--c-primary)"
                 onClick={() => {
+                  if (!form.callConfirmed) return toast.error('Please confirm the call with Section Officer before proceeding');
+                  if (!form.approvalPin || form.approvalPin.length !== 4) return toast.error("Enter the 4-digit Section Officer's Approval PIN");
+                  if (!form.pinValid) return toast.error('Validate the Section Officer\'s PIN before uploading photos');
                   if ((lc.photos?.cbIsolation?.length || 0) < 2) return toast.error('Upload at least 2 CB isolation photos first');
                   if ((lc.photos?.earthRod?.length || 0) < 1) return toast.error('Upload at least 1 Earth Rod photo first');
-                  if (!form.approvalPin || form.approvalPin.length !== 4) return toast.error('Enter the 4-digit approval PIN');
                   act('jeReview', { remarks: form.remarks, approvalPin: form.approvalPin });
                 }} />
             </Section>
@@ -293,7 +393,11 @@ export default function LCDetailPage() {
               <label style={{ fontSize: 12, color: 'var(--c-text3)' }}>Select Lineman</label>
               <select onChange={e => set('linemanId', e.target.value)} style={{ ...inp, marginTop: 4 }}>
                 <option value="">Choose lineman...</option>
-                {linemen.map(l => <option key={l._id} value={l._id}>{l.name} ({l.phone}) — {getRoleLabel(l.role, l)}</option>)}
+                {linemen.map(l => (
+                  <option key={l._id} value={l._id} disabled={!!l.busy}>
+                    {l.name} ({l.phone}) — {getRoleLabel(l.role, l)}{l.busy ? ' - Working on other LCs' : ''}
+                  </option>
+                ))}
               </select>
               <ActionBtn label="Assign Work" loading={acting} color="#C2410C"
                 onClick={() => {
@@ -306,13 +410,20 @@ export default function LCDetailPage() {
           {/* ── START WORK (Lineman) */}
           {role === 'LINEMAN' && status === 'DELEGATED' && (lc.assignedLineman?._id?.toString() === user?._id || lc.assignedLineman?.toString() === user?._id) && (
             <Section title="🔧 Start Field Work">
-              <PhotoUpload lcId={id} photoType="fieldPreWork" label="Pre-Work Site Photos (min 1)" minRequired={1} existing={lc.photos?.fieldPreWork} onUploaded={reloadPhotos} />
               <label style={{ fontSize: 12, color: 'var(--c-text3)' }}>Enter 4-digit secret code</label>
-              <input maxLength={4} onChange={e => set('secretCode', e.target.value)} placeholder="_ _ _ _"
+              <input maxLength={4} onChange={e => { set('secretCode', e.target.value); set('secretCodeValid', false); }} placeholder="_ _ _ _"
                 style={{ ...inp, marginTop: 4, fontSize: 26, letterSpacing: '0.5em', textAlign: 'center' }} />
+              <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center' }}>
+                <button onClick={validateSecretCode} disabled={pinChecking} style={{ padding: '8px 12px', borderRadius: 6, border: 'none', background: pinChecking ? 'var(--c-text3)' : 'var(--c-primary)', color: '#fff', cursor: pinChecking ? 'not-allowed' : 'pointer' }}>
+                  {pinChecking ? 'Validating...' : 'Validate Secret Code'}
+                </button>
+                {form.secretCodeValid && <div style={{ color: 'var(--c-success)', fontWeight: 600 }}>Code valid</div>}
+              </div>
+              <PhotoUpload lcId={id} photoType="fieldPreWork" label="Pre-Work Site Photos (min 1)" minRequired={1} existing={lc.photos?.fieldPreWork} onUploaded={reloadPhotos} pinValidated={!!form.secretCodeValid} />
               <ActionBtn label="Unlock & Start Work" loading={acting} color="var(--c-warning)"
                 onClick={() => {
                   if (!form.secretCode || form.secretCode.length !== 4) return toast.error('Enter 4-digit secret code');
+                  if (!form.secretCodeValid) return toast.error('Validate secret code before uploading photos');
                   if ((lc.photos?.fieldPreWork?.length || 0) < 1) return toast.error('Upload at least 1 pre-work photo');
                   act('startWork', { secretCode: form.secretCode });
                 }} />
@@ -379,17 +490,83 @@ export default function LCDetailPage() {
 
           {/* ── RELEASE (JE) */}
           {canPerformAction(role, 'release') && status === 'CLOSE_REQUESTED' && (
-            <Section title="⚡ Release LC & Energize">
+            <Section title="⚡ Release LC">
+              <div style={{ marginBottom: 10 }}>
+                <label style={{ fontSize: 12, color: 'var(--c-text3)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <input type="checkbox" checked={!!form.releaseConfirmed} onChange={e => { set('releaseConfirmed', e.target.checked); set('releaseCodeValid', false); }} style={{ width: 16, height: 16 }} />
+                  <span style={{ fontWeight: 700, color: 'var(--c-primary)', background: 'rgba(14,165,233,0.08)', padding: '2px 6px', borderRadius: 6 }}>
+                    Confirmation with Section officer before releasing LC?
+                  </span>
+                </label>
+              </div>
               <label style={{ fontSize: 12, color: 'var(--c-text3)', marginTop: 10, display: 'block' }}>Secret code (confirm verbally with LC requestor)</label>
-              <input maxLength={4} onChange={e => set('releaseCode', e.target.value)} placeholder="_ _ _ _"
+              <input maxLength={4} onChange={e => { set('releaseCode', e.target.value); set('releaseCodeValid', false); }} placeholder="_ _ _ _"
                 style={{ ...inp, marginTop: 4, fontSize: 26, letterSpacing: '0.5em', textAlign: 'center' }} />
+              <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center' }}>
+                <button onClick={validateReleaseCode} disabled={releaseChecking || !form.releaseConfirmed} style={{ padding: '8px 12px', borderRadius: 6, border: 'none', background: (releaseChecking || !form.releaseConfirmed) ? 'var(--c-text3)' : 'var(--c-primary)', color: '#fff', cursor: (releaseChecking || !form.releaseConfirmed) ? 'not-allowed' : 'pointer' }}>
+                  {releaseChecking ? 'Validating...' : 'Validate PIN'}
+                </button>
+                {form.releaseCodeValid && <div style={{ color: 'var(--c-success)', fontWeight: 600 }}>PIN valid</div>}
+              </div>
               <label style={{ fontSize: 12, color: 'var(--c-text3)', marginTop: 10, display: 'block' }}>Release remarks</label>
               <textarea onChange={e => set('remarks', e.target.value)} placeholder="Line restored and energized..." rows={2} style={{ ...inp, marginTop: 4, resize: 'vertical' }} />
               <ActionBtn label="Release LC" loading={acting} color="#065F46"
                 onClick={() => {
+                  if (!form.releaseConfirmed) return toast.error('Please confirm with Section officer before releasing LC');
                   if (!form.releaseCode || form.releaseCode.length !== 4) return toast.error('Enter the 4-digit secret code');
+                  if (!form.releaseCodeValid) return toast.error('Validate PIN before releasing LC');
                   act('release', { secretCode: form.releaseCode, remarks: form.remarks });
                 }} />
+            </Section>
+          )}
+
+          {/* ── ENERGIZE FEEDER (Shift JE) */}
+          {canPerformAction(role, 'energizeFeeder') && status === 'RELEASED' && (
+            <Section title="⚡ Energize Feeder">
+              {energizeReadiness.pendingCount > 0 && (
+                <div style={{ marginBottom: 10, padding: '10px 12px', borderRadius: 8, background: '#FEF2F2', border: '1px solid #FECACA', color: '#991B1B', fontSize: 12 }}>
+                  Energize disabled: {energizeReadiness.pendingCount} pending LC(s) found on feeder {lc.feeder}.
+                  {energizeReadiness.pendingLcs?.length > 0 && (
+                    <div style={{ marginTop: 6, color: '#7F1D1D' }}>
+                      Pending: {energizeReadiness.pendingLcs.map(item => `${item.lcNumber} (${item.status})`).join(', ')}
+                    </div>
+                  )}
+                </div>
+              )}
+              <div style={{ marginTop: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <PhotoUpload lcId={id} photoType="cbRestored" label="CB Restored Photos (min 1 required)" minRequired={1} existing={lc.photos?.cbRestored} onUploaded={reloadPhotos} />
+                  <div style={{ fontSize: 13, fontWeight: 700, color: (lc.photos?.cbRestored?.length || 0) >= 1 ? '#065F46' : '#B91C1C' }}>
+                    {(lc.photos?.cbRestored?.length || 0) >= 1 ? 'Uploaded' : 'Missing'}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
+                  <PhotoUpload lcId={id} photoType="earthRemoved" label="Earth Removed Photos (min 1 required)" minRequired={1} existing={lc.photos?.earthRemoved} onUploaded={reloadPhotos} />
+                  <div style={{ fontSize: 13, fontWeight: 700, color: (lc.photos?.earthRemoved?.length || 0) >= 1 ? '#065F46' : '#B91C1C' }}>
+                    {(lc.photos?.earthRemoved?.length || 0) >= 1 ? 'Uploaded' : 'Missing'}
+                  </div>
+                </div>
+              </div>
+              <label style={{ fontSize: 12, color: 'var(--c-text3)', marginTop: 10, display: 'block' }}>Energization remarks</label>
+              <textarea onChange={e => set('energizeRemarks', e.target.value)} placeholder="Feeder energized after confirming all LCs are released..." rows={2} style={{ ...inp, marginTop: 4, resize: 'vertical' }} />
+              <button
+                disabled={acting || energizeReadiness.loading || !energizeReadiness.canEnergize || ((lc.photos?.cbRestored?.length || 0) < 1) || ((lc.photos?.earthRemoved?.length || 0) < 1)}
+                onClick={() => act('energizeFeeder', { remarks: form.energizeRemarks })}
+                style={{
+                  width: '100%',
+                  padding: '10px',
+                  borderRadius: 8,
+                  border: 'none',
+                  marginTop: 8,
+                  background: (acting || energizeReadiness.loading || !energizeReadiness.canEnergize) ? 'var(--c-text3)' : '#065F46',
+                  color: '#fff',
+                  fontSize: 14,
+                  fontWeight: 600,
+                  cursor: (acting || energizeReadiness.loading || !energizeReadiness.canEnergize) ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {acting ? 'Processing...' : energizeReadiness.loading ? 'Checking feeder status...' : 'Energize Feeder'}
+              </button>
             </Section>
           )}
 
@@ -397,8 +574,18 @@ export default function LCDetailPage() {
           {status === 'RELEASED' && (
             <div style={{ background: 'var(--c-success-light)', border: '1px solid #86EFAC', borderRadius: 'var(--radius-lg)', padding: '1.25rem', textAlign: 'center' }}>
               <div style={{ fontSize: 32 }}>⚡</div>
-              <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--c-success)', marginTop: 6 }}>Line Energized</div>
-              <div style={{ fontSize: 12, color: 'var(--c-success)', marginTop: 2 }}>LC successfully closed</div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--c-success)', marginTop: 6 }}>LC Released</div>
+              <div style={{ fontSize: 12, color: 'var(--c-success)', marginTop: 2 }}>Awaiting feeder energization</div>
+              {lc.actualDuration && <div style={{ fontSize: 12, color: 'var(--c-text3)', marginTop: 8 }}>Total duration: {lc.actualDuration}h</div>}
+            </div>
+          )}
+
+          {/* Energized */}
+          {status === 'ENERGIZED' && (
+            <div style={{ background: 'var(--c-success-light)', border: '1px solid #86EFAC', borderRadius: 'var(--radius-lg)', padding: '1.25rem', textAlign: 'center' }}>
+              <div style={{ fontSize: 32 }}>⚡</div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--c-success)', marginTop: 6 }}>Feeder Energized</div>
+              <div style={{ fontSize: 12, color: 'var(--c-success)', marginTop: 2 }}>All pending LCs on this feeder are cleared</div>
               {lc.actualDuration && <div style={{ fontSize: 12, color: 'var(--c-text3)', marginTop: 8 }}>Total duration: {lc.actualDuration}h</div>}
             </div>
           )}

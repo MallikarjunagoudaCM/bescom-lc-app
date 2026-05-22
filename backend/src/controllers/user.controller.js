@@ -1,4 +1,5 @@
 const User = require('../models/User.model');
+const LC = require('../models/LC.model');
 
 exports.getAll = async (req, res) => {
   const { role, isActive } = req.query;
@@ -241,6 +242,21 @@ exports.getLinemanList = async (req, res) => {
   }
 
   const users = await User.find(query)
-    .select('name phone role');
-  res.json({ users });
+    .select('name phone role')
+    .lean();
+
+  const activeStatuses = ['DELEGATED', 'IN_PROGRESS', 'CLOSE_REQUESTED'];
+  const busyCounts = await LC.aggregate([
+    { $match: { status: { $in: activeStatuses }, assignedLineman: { $in: users.map(user => user._id) } } },
+    { $group: { _id: '$assignedLineman', count: { $sum: 1 } } },
+  ]);
+
+  const busyMap = new Map(busyCounts.map(row => [String(row._id), row.count]));
+  const enrichedUsers = users.map(user => ({
+    ...user,
+    busy: (busyMap.get(String(user._id)) || 0) > 0,
+    activeLcCount: busyMap.get(String(user._id)) || 0,
+  }));
+
+  res.json({ users: enrichedUsers });
 };

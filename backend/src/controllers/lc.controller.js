@@ -18,6 +18,35 @@ const addLog = (lc, action, user, remarks, secretCode) => {
 
 const generateCode = () => Math.floor(1000 + Math.random() * 9000).toString();
 
+const findPendingLCsOnFeeder = async (lc) => {
+  const nonPendingStatuses = ['RELEASED', 'ENERGIZED', 'REJECTED'];
+  const pendingLcs = await LC.find({
+    feeder: lc.feeder,
+    _id: { $ne: lc._id },
+    status: { $nin: nonPendingStatuses },
+  })
+    .select('lcNumber status feeder createdAt')
+    .sort({ createdAt: -1 })
+    .lean();
+
+  return pendingLcs;
+};
+
+const collectStakeholdersForLC = async (lc) => {
+  const userIds = new Set();
+  [lc.initiatedBy, lc.approvedBy, lc.aeeApprovedBy, lc.assignedLineman].forEach(userId => {
+    if (userId) userIds.add(userId.toString ? userId.toString() : String(userId));
+  });
+
+  if (Array.isArray(lc.notifyUserIds)) {
+    lc.notifyUserIds.forEach(userId => {
+      if (userId) userIds.add(userId.toString ? userId.toString() : String(userId));
+    });
+  }
+
+  return User.find({ _id: { $in: Array.from(userIds) } }).select('name phone role notifyEmail notifySMS email').lean();
+};
+
 const sanitizeLcForUser = (lc, user) => {
   const obj = lc.toObject ? lc.toObject() : JSON.parse(JSON.stringify(lc));
   const initiatedById = obj.initiatedBy?._id ? obj.initiatedBy._id.toString() : obj.initiatedBy?.toString?.();
@@ -111,6 +140,7 @@ exports.getAll = async (req, res) => {
       .populate('jeReviewedBy', 'name phone')
       .populate('assignedLineman', 'name phone')
       .populate('releasedBy', 'name phone')
+      .populate('energizedBy', 'name phone')
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
       .limit(Number(limit)),
@@ -130,6 +160,7 @@ exports.getById = async (req, res) => {
     .populate('jeReviewedBy', 'name phone')
     .populate('assignedLineman', 'name phone phone')
     .populate('releasedBy', 'name phone')
+    .populate('energizedBy', 'name phone')
     .populate('notifyUserIds', 'name phone role')
     .populate('log.performedBy', 'name phone');
 
@@ -451,7 +482,7 @@ exports.jeReview = async (req, res) => {
     return res.json({ lc: sanitizeLcForUser(lc, req.user), secretCode: plainCode, message: 'CB isolated and work auto-assigned to requestor.' });
   }
 
-  addLog(lc, 'CB isolated. JE reviewed. Secret code generated.', req.user, req.body.remarks, plainCode);
+  addLog(lc, 'CB isolated. LC Issued. Secret code generated.', req.user, req.body.remarks, plainCode);
   await lc.save();
 
   // Notify SO and extra configured users
@@ -459,6 +490,22 @@ exports.jeReview = async (req, res) => {
 
   // Return plain code only in this response — never stored in plain text
   res.json({ lc: sanitizeLcForUser(lc, req.user), secretCode: plainCode, message: 'CB isolated. Secret code generated.' });
+};
+
+// ─── PATCH /lc/:id/validate-pin ───────────────────────────────────────────────
+exports.validatePin = async (req, res) => {
+  const lc = await LC.findById(req.params.id);
+  if (!lc) return res.status(404).json({ error: 'LC not found' });
+  if (lc.status !== 'APPROVED') return res.status(400).json({ error: `Cannot validate PIN in status: ${lc.status}` });
+
+  const { approvalPin } = req.body;
+  if (!approvalPin) return res.status(400).json({ error: 'approvalPin required' });
+
+  if (lc.approvalPin !== approvalPin) {
+    return res.status(400).json({ error: 'Invalid approval PIN' });
+  }
+
+  res.json({ valid: true, message: 'Approval PIN is valid' });
 };
 
 // ─── PATCH /lc/:id/delegate ──────────────────────────────────────────────────
@@ -527,6 +574,44 @@ exports.startWork = async (req, res) => {
   res.json({ lc: sanitizeLcForUser(lc, req.user), message: 'Work started successfully' });
 };
 
+// ─── PATCH /lc/:id/validate-secret-code ──────────────────────────────────────
+exports.validateSecretCode = async (req, res) => {
+  const { secretCode } = req.body;
+  if (!secretCode || String(secretCode).length !== 4) {
+    return res.status(400).json({ error: 'Enter a valid 4-digit secret code' });
+  }
+
+  const lc = await LC.findById(req.params.id).select('+secretCodeHash');
+  if (!lc) return res.status(404).json({ error: 'LC not found' });
+  if (lc.status !== 'DELEGATED') return res.status(400).json({ error: `Cannot validate secret code in status: ${lc.status}` });
+
+  if (!lc.assignedLineman || lc.assignedLineman.toString() !== req.user._id.toString()) {
+    return res.status(403).json({ error: 'Only the assigned lineman can validate secret code' });
+  }
+
+  const valid = await bcrypt.compare(secretCode, lc.secretCodeHash);
+  if (!valid) return res.status(400).json({ error: 'Invalid secret code' });
+
+  return res.json({ valid: true, message: 'Secret code is valid' });
+};
+
+// ─── PATCH /lc/:id/validate-release-code ─────────────────────────────────────
+exports.validateReleaseCode = async (req, res) => {
+  const { secretCode } = req.body;
+  if (!secretCode || String(secretCode).length !== 4) {
+    return res.status(400).json({ error: 'Enter a valid 4-digit secret code' });
+  }
+
+  const lc = await LC.findById(req.params.id).select('+secretCodeHash');
+  if (!lc) return res.status(404).json({ error: 'LC not found' });
+  if (lc.status !== 'CLOSE_REQUESTED') return res.status(400).json({ error: `Cannot validate release code in status: ${lc.status}` });
+
+  const valid = await bcrypt.compare(secretCode, lc.secretCodeHash);
+  if (!valid) return res.status(400).json({ error: 'Invalid secret code' });
+
+  return res.json({ valid: true, message: 'Release code is valid' });
+};
+
 // ─── PATCH /lc/:id/complete-work ─────────────────────────────────────────────
 
 exports.completeWork = async (req, res) => {
@@ -578,7 +663,7 @@ exports.closeRequest = async (req, res) => {
 
 exports.release = async (req, res) => {
   const { secretCode } = req.body;
-  if (!secretCode) return res.status(400).json({ error: 'Secret code required to energize' });
+  if (!secretCode) return res.status(400).json({ error: 'Secret code required to release LC' });
 
   const lc = await LC.findById(req.params.id).select('+secretCodeHash');
   if (!lc) return res.status(404).json({ error: 'LC not found' });
@@ -586,13 +671,6 @@ exports.release = async (req, res) => {
 
   const valid = await bcrypt.compare(secretCode, lc.secretCodeHash);
   if (!valid) return res.status(400).json({ error: 'Invalid secret code. Confirm with the LC requestor.' });
-
-  if (!lc.photos.earthRemoved || lc.photos.earthRemoved.length < 1) {
-    return res.status(400).json({ error: 'Earth removed photo required' });
-  }
-  if (!lc.photos.cbRestored || lc.photos.cbRestored.length < 1) {
-    return res.status(400).json({ error: 'CB restored photo required' });
-  }
 
   lc.status = 'RELEASED';
   lc.releasedBy = req.user._id;
@@ -603,7 +681,7 @@ exports.release = async (req, res) => {
     lc.actualDuration = Math.round((lc.releasedAt - lc.workStartedAt) / 3600000 * 10) / 10;
   }
 
-  addLog(lc, 'LC released. Earth removed. CB restored. Line energized.', req.user, req.body.remarks);
+  addLog(lc, 'LC released. Earth removed. CB restored. Awaiting feeder energization.', req.user, req.body.remarks);
   await lc.save();
 
   const stakeholders = await User.find({
@@ -611,7 +689,79 @@ exports.release = async (req, res) => {
   });
   notifSvc.notifyLCReleased(lc, stakeholders).catch(console.error);
 
-  res.json({ lc: sanitizeLcForUser(lc, req.user), message: 'LC released. Line energized.' });
+  res.json({ lc: sanitizeLcForUser(lc, req.user), message: 'LC released. Proceed to feeder energization after pending LCs are cleared.' });
+};
+
+// ─── GET /lc/:id/energize-readiness ──────────────────────────────────────────
+exports.getEnergizeReadiness = async (req, res) => {
+  const lc = await LC.findById(req.params.id);
+  if (!lc) return res.status(404).json({ error: 'LC not found' });
+
+  if (lc.status !== 'RELEASED') {
+    return res.json({
+      canEnergize: false,
+      pendingCount: 0,
+      pendingLcs: [],
+      reason: `Cannot energize feeder in status: ${lc.status}`,
+    });
+  }
+
+  const pendingLcs = await findPendingLCsOnFeeder(lc);
+  return res.json({
+    canEnergize: pendingLcs.length === 0,
+    pendingCount: pendingLcs.length,
+    pendingLcs,
+    reason: pendingLcs.length ? 'Pending LCs exist on the same feeder' : '',
+  });
+};
+
+// ─── PATCH /lc/:id/energize-feeder ───────────────────────────────────────────
+exports.energizeFeeder = async (req, res) => {
+  const lc = await LC.findById(req.params.id);
+  if (!lc) return res.status(404).json({ error: 'LC not found' });
+  if (lc.status !== 'RELEASED') return res.status(400).json({ error: `Cannot energize feeder in status: ${lc.status}` });
+
+  const pendingLcs = await findPendingLCsOnFeeder(lc);
+  if (pendingLcs.length > 0) {
+    return res.status(400).json({
+      error: 'Cannot energize feeder until all pending LCs on this feeder are cleared',
+      pendingCount: pendingLcs.length,
+      pendingLcs,
+    });
+  }
+
+  // Require JE to upload CB restored and Earth removed photos before energizing
+  if (!lc.photos || !Array.isArray(lc.photos.cbRestored) || lc.photos.cbRestored.length < 1) {
+    return res.status(400).json({ error: 'Upload at least 1 CB restored photo before energizing feeder' });
+  }
+  if (!lc.photos || !Array.isArray(lc.photos.earthRemoved) || lc.photos.earthRemoved.length < 1) {
+    return res.status(400).json({ error: 'Upload at least 1 Earth Removed photo before energizing feeder' });
+  }
+
+  const releasedLcs = await LC.find({
+    feeder: lc.feeder,
+    status: 'RELEASED',
+  });
+
+  const energizedAt = new Date();
+  const energizeRemarks = req.body.remarks || '';
+
+  await Promise.all(releasedLcs.map(async targetLc => {
+    targetLc.status = 'ENERGIZED';
+    targetLc.energizedBy = req.user._id;
+    targetLc.energizedAt = energizedAt;
+    targetLc.energizeRemarks = energizeRemarks;
+    addLog(targetLc, 'Feeder energized after all LCs were released.', req.user, energizeRemarks);
+    await targetLc.save();
+  }));
+
+  await Promise.all(releasedLcs.map(async targetLc => {
+    const stakeholders = await collectStakeholdersForLC(targetLc);
+    return notifSvc.notifyFeederEnergized(targetLc, stakeholders).catch(console.error);
+  }));
+
+  const updatedLc = releasedLcs.find(item => item._id.toString() === lc._id.toString()) || lc;
+  return res.json({ lc: sanitizeLcForUser(updatedLc, req.user), message: 'Feeder energized successfully.' });
 };
 
 // ─── POST /lc/:id/photos ──────────────────────────────────────────────────────
@@ -622,6 +772,14 @@ exports.uploadPhotos = async (req, res) => {
 
   if (!allowedTypes.includes(photoType)) {
     return res.status(400).json({ error: `Invalid photoType. Allowed: ${allowedTypes.join(', ')}` });
+  }
+
+  // Restrict certain photo uploads to JE roles only (JE_BESCOM, SHIFT_JE_KPTCL)
+  if (['cbRestored', 'earthRemoved'].includes(photoType)) {
+    const allowedJeRoles = ['JE_BESCOM', 'SHIFT_JE_KPTCL'];
+    if (!allowedJeRoles.includes(req.user.role)) {
+      return res.status(403).json({ error: 'Only JE users can upload this photo type' });
+    }
   }
 
   const lc = await LC.findById(req.params.id);
