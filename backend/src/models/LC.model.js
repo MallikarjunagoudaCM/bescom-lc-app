@@ -36,7 +36,8 @@ const LC_STATUSES = [
 const WORK_TYPES = ['UNPLANNED', 'PLANNED'];
 
 const lcSchema = new mongoose.Schema({
-  lcNumber: { type: String, unique: true },          // e.g. LC-2024-001234
+  requestNumber: { type: String }, // e.g. REQ-26-00001
+  lcNumber: { type: String },       // e.g. LC-HASSAN-26-00001
   workType: { type: String, enum: WORK_TYPES, required: true, default: 'UNPLANNED' },
   status: { type: String, enum: LC_STATUSES, default: 'INITIATED' },
 
@@ -46,6 +47,7 @@ const lcSchema = new mongoose.Schema({
   subdivision: { type: String },
   section: { type: String },
   substation: { type: String },
+  station: { type: String, trim: true },
   natureOfWork: { type: String, required: true },
   description: { type: String },
   estimatedDuration: { type: Number, required: true }, // hours
@@ -104,21 +106,19 @@ const lcSchema = new mongoose.Schema({
   log: [logEntrySchema],
 }, { timestamps: true });
 
-// ─── Auto-generate LC number ──────────────────────────────────────────────────
-
-lcSchema.pre('save', async function (next) {
-  if (this.isNew && !this.lcNumber) {
-    const year = new Date().getFullYear();
-    const count = await this.constructor.countDocuments();
-    this.lcNumber = `LC-${year}-${String(count + 1).padStart(6, '0')}`;
-  }
-  next();
-});
-
 // ─── Indexes ──────────────────────────────────────────────────────────────────
 
+lcSchema.index(
+  { requestNumber: 1 },
+  { unique: true, partialFilterExpression: { requestNumber: { $type: 'string' } } },
+);
+lcSchema.index(
+  { lcNumber: 1 },
+  { unique: true, partialFilterExpression: { lcNumber: { $type: 'string' } } },
+);
 lcSchema.index({ status: 1 });
 lcSchema.index({ initiatedBy: 1 });
+lcSchema.index({ station: 1, createdAt: -1 });
 lcSchema.index({ feeder: 1 });
 lcSchema.index({ createdAt: -1 });
 lcSchema.index({ workType: 1 });

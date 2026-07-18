@@ -188,7 +188,10 @@ export default function LCDetailPage() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
           <div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6, flexWrap: 'wrap' }}>
-              <span style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 700, color: 'var(--c-primary)' }}>{lc.lcNumber}</span>
+              <span style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 700, color: 'var(--c-primary)' }}>{lc.lcNumber || lc.requestNumber}</span>
+              {lc.requestNumber && lc.lcNumber && (
+                <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 4, background: '#F3F4F6', color: 'var(--c-text3)', fontWeight: 600 }}>REQ {lc.requestNumber}</span>
+              )}
               <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 4, background: lc.workType === 'PLANNED' ? 'var(--c-primary-light)' : '#FFF7ED', color: lc.workType === 'PLANNED' ? 'var(--c-primary)' : 'var(--c-warning)', fontWeight: 500 }}>{lc.workType}</span>
               {lc.workCompletedAt && status === 'IN_PROGRESS' ? (
                 <span style={{ fontSize: 12, padding: '4px 10px', borderRadius: 20, background: '#DBEAFE', color: '#1E40AF', fontWeight: 600 }}>✅ Work Completed - LC to be Returned</span>
@@ -528,7 +531,7 @@ export default function LCDetailPage() {
                   Energize disabled: {energizeReadiness.pendingCount} pending LC(s) found on feeder {lc.feeder}.
                   {energizeReadiness.pendingLcs?.length > 0 && (
                     <div style={{ marginTop: 6, color: '#7F1D1D' }}>
-                      Pending: {energizeReadiness.pendingLcs.map(item => `${item.lcNumber} (${item.status})`).join(', ')}
+                      Pending: {energizeReadiness.pendingLcs.map(item => `${item.lcNumber || item.requestNumber} (${item.status})`).join(', ')}
                     </div>
                   )}
                 </div>

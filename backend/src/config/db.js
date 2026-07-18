@@ -6,6 +6,10 @@ const connectDB = async () => {
       useNewUrlParser: true,
       useUnifiedTopology: true,
     });
+    const LC = mongoose.models.LC;
+    if (LC) {
+      await LC.syncIndexes();
+    }
     console.log(`MongoDB connected: ${conn.connection.host}`);
   } catch (err) {
     console.error('MongoDB connection failed:', err.message);

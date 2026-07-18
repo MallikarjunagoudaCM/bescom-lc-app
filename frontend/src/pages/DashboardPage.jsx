@@ -90,7 +90,7 @@ export default function DashboardPage() {
                     textDecoration: 'none', color: 'inherit',
                   }}>
                     <div>
-                      <div style={{ fontSize: 12, fontWeight: 600 }}>{lc.lcNumber}</div>
+                      <div style={{ fontSize: 12, fontWeight: 600 }}>{lc.lcNumber || lc.requestNumber}</div>
                       <div style={{ fontSize: 12, color: 'var(--c-text3)' }}>{lc.feeder}</div>
                     </div>
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>

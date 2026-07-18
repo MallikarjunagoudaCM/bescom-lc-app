@@ -72,7 +72,7 @@ export default function NotificationsPage() {
                     </span>
                     {n.lc && (
                       <Link to={`/lc/${n.lc}`} style={{ fontSize: 11, color: 'var(--c-primary)', fontWeight: 500 }}>
-                        {n.lcNumber} →
+                        {n.lcNumber || 'LC'} →
                       </Link>
                     )}
                     {!n.isRead && (

@@ -2,8 +2,11 @@ import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from
 import { Toaster, toast } from 'react-hot-toast';
 import { useEffect, useRef } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { AuthProvider as AuthentikProvider } from '@bescom/authentik-auth';
+import { oidcConfig } from './auth/oidc';
 import { NotificationProvider } from './contexts/NotificationContext';
 import LoginPage from './pages/LoginPage';
+import CallbackPage from './pages/CallbackPage';
 import DashboardPage from './pages/DashboardPage';
 import LCListPage from './pages/LCListPage';
 import LCDetailPage from './pages/LCDetailPage';
@@ -72,26 +75,29 @@ function AndroidBackHandler() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <NotificationProvider>
-        <Toaster position="top-right" toastOptions={{ duration: 4000, style: { fontSize: 13 } }} />
-        <BrowserRouter>
-          <AndroidBackHandler />
-          <Routes>
-            <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
-            <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-              <Route index element={<DashboardPage />} />
-              <Route path="lc" element={<LCListPage />} />
-              <Route path="lc/:id" element={<LCDetailPage />} />
-              <Route path="users" element={<UsersPage />} />
-              <Route path="admin" element={<AdminPage />} />
-              <Route path="register" element={<RegisterPage />} />
-              <Route path="notifications" element={<NotificationsPage />} />
-            </Route>
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </BrowserRouter>
-      </NotificationProvider>
-    </AuthProvider>
+    <AuthentikProvider config={oidcConfig}>
+      <AuthProvider>
+        <NotificationProvider>
+          <Toaster position="top-right" toastOptions={{ duration: 4000, style: { fontSize: 13 } }} />
+          <BrowserRouter>
+            <AndroidBackHandler />
+            <Routes>
+              <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
+              <Route path="/callback" element={<CallbackPage />} />
+              <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
+                <Route index element={<DashboardPage />} />
+                <Route path="lc" element={<LCListPage />} />
+                <Route path="lc/:id" element={<LCDetailPage />} />
+                <Route path="users" element={<UsersPage />} />
+                <Route path="admin" element={<AdminPage />} />
+                <Route path="register" element={<RegisterPage />} />
+                <Route path="notifications" element={<NotificationsPage />} />
+              </Route>
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </BrowserRouter>
+        </NotificationProvider>
+      </AuthProvider>
+    </AuthentikProvider>
   );
 }

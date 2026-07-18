@@ -1,0 +1,12 @@
+{
+  "name": "@bescom/authentik-auth",
+  "version": "0.1.0",
+  "description": "Shared Authentik OIDC integration for BESCOM React apps",
+  "main": "src/index.js",
+  "license": "UNLICENSED",
+  "peerDependencies": {
+    "react": ">=18",
+    "react-router-dom": ">=6",
+    "oidc-client-ts": ">=2"
+  }
+}

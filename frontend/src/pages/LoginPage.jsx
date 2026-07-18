@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { useAuth as useAuthentikAuth } from '@bescom/authentik-auth';
 import toast from 'react-hot-toast';
 
 export default function LoginPage() {
   const [form, setForm] = useState({ phone: '', password: '' });
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
+  const { login: loginWithSso } = useAuthentikAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
@@ -61,6 +63,24 @@ export default function LoginPage() {
               {loading ? 'Signing in...' : 'Sign in →'}
             </button>
           </form>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '18px 0' }}>
+            <div style={{ flex: 1, height: 1, background: 'var(--c-border)' }} />
+            <span style={{ fontSize: 11, color: 'var(--c-text3)' }}>OR</span>
+            <div style={{ flex: 1, height: 1, background: 'var(--c-border)' }} />
+          </div>
+
+          <button
+            type="button"
+            onClick={() => loginWithSso()}
+            style={{
+              width: '100%', padding: '10px', borderRadius: 8,
+              border: '1px solid var(--c-border)', background: 'var(--c-surface)',
+              color: 'var(--c-text)', fontSize: 14, fontWeight: 600, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+            }}>
+            🔐 Login with Authentik SSO
+          </button>
 
           {/* Demo credentials */}
           <div style={{ marginTop: 20, padding: '12px', background: 'var(--c-surface2)', borderRadius: 8 }}>

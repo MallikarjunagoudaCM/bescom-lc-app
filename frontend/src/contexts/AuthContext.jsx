@@ -34,6 +34,17 @@ export function AuthProvider({ children }) {
     return data.user;
   };
 
+  // Used by the Authentik SSO callback flow — the backend has already
+  // verified the SSO token and matched it to an existing Mongo User by
+  // that point, so this just stores the resulting app tokens the same way
+  // the password-based login() does.
+  const loginWithTokens = (accessToken, refreshToken, user) => {
+    localStorage.setItem('accessToken', accessToken);
+    localStorage.setItem('refreshToken', refreshToken);
+    setUser(user);
+    return user;
+  };
+
   const logout = async () => {
     try { await authApi.logout(); } catch {}
     localStorage.removeItem('accessToken');
@@ -43,7 +54,7 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, setUser }}>
+    <AuthContext.Provider value={{ user, loading, login, loginWithTokens, logout, setUser }}>
       {children}
     </AuthContext.Provider>
   );

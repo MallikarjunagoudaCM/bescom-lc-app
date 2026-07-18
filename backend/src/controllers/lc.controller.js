@@ -18,6 +18,72 @@ const addLog = (lc, action, user, remarks, secretCode) => {
 
 const generateCode = () => Math.floor(1000 + Math.random() * 9000).toString();
 
+const escapeRegex = (value) => String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const getYearSuffix = (date = new Date()) => String(date.getFullYear()).slice(-2);
+
+const STATION_CODE_MAP = {
+  'Koramangala 66KV': 'KRG66',
+  'Hebbal 110KV': 'HBL110',
+  'Electronic City 66KV': 'ECT66',
+  'Yelahanka 110KV': 'YLK110',
+};
+
+const makeStationCode = (station) => {
+  const normalizedStation = String(station || '').trim();
+  if (STATION_CODE_MAP[normalizedStation]) {
+    return STATION_CODE_MAP[normalizedStation];
+  }
+
+  const normalized = normalizedStation
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, ' ')
+    .trim();
+
+  const tokens = normalized
+    .split(/\s+/)
+    .filter(Boolean)
+    .filter(token => !['STATION', 'SUBSTATION', 'SS', 'KPTCL', 'BESCOM'].includes(token));
+
+  const sourceTokens = tokens.length ? tokens : normalized.split(/\s+/).filter(Boolean);
+  const letters = sourceTokens
+    .map(token => token.replace(/[^A-Z]/g, '').charAt(0))
+    .join('')
+    .replace(/[^A-Z0-9]/g, '');
+  const digits = (normalized.match(/\d+/g) || []).join('');
+
+  if (letters && digits) return `${letters}${digits}`.slice(0, 8);
+  if (letters) return letters.length >= 3 ? letters.slice(0, 4) : letters.slice(0, 3);
+  if (digits) return digits.slice(0, 4);
+
+  const compact = normalized.replace(/[^A-Z0-9]/g, '').slice(0, 8);
+  return compact || 'GEN';
+};
+
+const generateRequestNumber = async () => {
+  const year = getYearSuffix();
+  const prefix = `REQ-${year}-`;
+  const count = await LC.countDocuments({ requestNumber: new RegExp(`^${escapeRegex(prefix)}`) });
+  return `${prefix}${String(count + 1).padStart(5, '0')}`;
+};
+
+const generateLcNumber = async (station) => {
+  const year = getYearSuffix();
+  const stationCode = makeStationCode(station);
+  const prefix = `LC-${stationCode}-${year}-`;
+  const count = await LC.countDocuments({ station, lcNumber: new RegExp(`^${escapeRegex(prefix)}`) });
+  return `${prefix}${String(count + 1).padStart(5, '0')}`;
+};
+
+const findActiveLcsOnFeederAndSection = async (feeder, section) => LC.find({
+  feeder,
+  section,
+  status: { $in: ['INITIATED', 'APPROVED', 'JE_REVIEWED', 'DELEGATED', 'IN_PROGRESS', 'CLOSE_REQUESTED', 'RELEASED'] },
+})
+  .select('lcNumber requestNumber status feeder section createdAt initiatedBy')
+  .sort({ createdAt: -1 })
+  .lean();
+
 const findPendingLCsOnFeeder = async (lc) => {
   const nonPendingStatuses = ['RELEASED', 'ENERGIZED', 'REJECTED'];
   const pendingLcs = await LC.find({
@@ -173,9 +239,10 @@ exports.getById = async (req, res) => {
 exports.create = async (req, res) => {
   const { feeder, section, substation: requestSubstation, station: requestStation, natureOfWork, description, estimatedDuration, workType, plannedStartAt } = req.body;
   const substation = requestSubstation || requestStation;
+  const station = requestStation || requestSubstation || req.user.station || req.user.substation;
 
-  if (!feeder || !natureOfWork || !estimatedDuration) {
-    return res.status(400).json({ error: 'feeder, natureOfWork, estimatedDuration are required' });
+  if (!feeder || !natureOfWork || !estimatedDuration || !station) {
+    return res.status(400).json({ error: 'station, feeder, natureOfWork, estimatedDuration are required' });
   }
 
   const user = req.user;
@@ -213,7 +280,26 @@ exports.create = async (req, res) => {
     approverRole = 'AEE';
   }
 
+  const activeLcs = await findActiveLcsOnFeederAndSection(finalFeeder, finalSection);
+  if (activeLcs.length > 0) {
+    return res.status(409).json({
+      error: `An active LC already exists on feeder ${finalFeeder} for section ${finalSection}`,
+      activeLcs: activeLcs.map(lc => ({
+        lcNumber: lc.lcNumber,
+        requestNumber: lc.requestNumber,
+        status: lc.status,
+        feeder: lc.feeder,
+        section: lc.section,
+        createdAt: lc.createdAt,
+      })),
+    });
+  }
+
+  const requestNumber = await generateRequestNumber();
+
   const lc = new LC({
+    requestNumber,
+    station,
     feeder: finalFeeder,
     division: user.division,
     subdivision: user.subdivision,
@@ -455,6 +541,10 @@ exports.jeReview = async (req, res) => {
   // Generate & hash secret code
   const plainCode = generateCode();
   const hashedCode = await bcrypt.hash(plainCode, 10);
+
+  if (!lc.lcNumber) {
+    lc.lcNumber = await generateLcNumber(lc.station || lc.substation || lc.section || 'GEN');
+  }
 
   lc.status = 'JE_REVIEWED';
   lc.jeReviewedBy = req.user._id;

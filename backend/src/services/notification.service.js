@@ -26,6 +26,8 @@ const sendSMS = async (to, body) => {
   } catch (err) { console.error('SMS failed:', err.message); }
 };
 
+const getDisplayNumber = (lc) => lc?.lcNumber || lc?.requestNumber || 'LC';
+
 const lcEmailTemplate = ({ title, lcNumber, feeder, message, actionUrl }) => `
 <div style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:24px;background:#f9fafb;border-radius:12px;">
   <div style="background:#1D4ED8;padding:16px 24px;border-radius:8px;margin-bottom:20px;">
@@ -42,30 +44,31 @@ const lcEmailTemplate = ({ title, lcNumber, feeder, message, actionUrl }) => `
 
 const notify = async ({ recipients, lc, title, message, type = 'INFO' }) => {
   if (!Array.isArray(recipients)) recipients = [recipients];
+  const displayNumber = getDisplayNumber(lc);
   for (const user of recipients) {
     if (!user) continue;
     try {
-      await Notification.create({ recipient: user._id, lc: lc._id, lcNumber: lc.lcNumber, title, message, type, channel: 'APP' });
+      await Notification.create({ recipient: user._id, lc: lc._id, lcNumber: displayNumber, title, message, type, channel: 'APP' });
     } catch (e) { console.error('In-app notif failed:', e.message); }
     if (user.notifyEmail && user.email) {
-      await sendEmail(user.email, `[BESCOM LC] ${title} - ${lc.lcNumber}`,
-        lcEmailTemplate({ title, lcNumber: lc.lcNumber, feeder: lc.feeder, message, actionUrl: `${process.env.CLIENT_URL}/lc/${lc._id}` }));
+      await sendEmail(user.email, `[BESCOM LC] ${title} - ${displayNumber}`,
+        lcEmailTemplate({ title, lcNumber: displayNumber, feeder: lc.feeder, message, actionUrl: `${process.env.CLIENT_URL}/lc/${lc._id}` }));
     }
     if (user.notifySMS && user.phone) {
-      await sendSMS(user.phone, `BESCOM LC: ${title} | ${lc.lcNumber} | ${lc.feeder}`);
+      await sendSMS(user.phone, `BESCOM LC: ${title} | ${displayNumber} | ${lc.feeder}`);
     }
   }
 };
 
 module.exports = {
   notify,
-  notifyLCInitiated: (lc, approvers) => notify({ recipients: approvers, lc, title: 'New LC Request', message: `New ${lc.workType} LC for ${lc.feeder}. Please approve.`, type: 'ACTION_REQUIRED' }),
-  notifyLCApproved: (lc, user) => notify({ recipients: [user], lc, title: 'LC Approved', message: `Your LC for ${lc.feeder} is approved. Awaiting LC issuance.`, type: 'INFO' }),
-  notifyJEReviewed: (lc, users) => notify({ recipients: users, lc, title: 'LC Issued - Action Required', message: `LC Issued for ${lc.feeder}. Secret code generated. Assign to lineman.`, type: 'ACTION_REQUIRED' }),
+  notifyLCInitiated: (lc, approvers) => notify({ recipients: approvers, lc, title: 'New LC Request', message: `New request ${getDisplayNumber(lc)} for ${lc.feeder}. Please approve.`, type: 'ACTION_REQUIRED' }),
+  notifyLCApproved: (lc, user) => notify({ recipients: [user], lc, title: 'LC Approved', message: `Your request ${getDisplayNumber(lc)} for ${lc.feeder} is approved. Awaiting LC issuance.`, type: 'INFO' }),
+  notifyJEReviewed: (lc, users) => notify({ recipients: users, lc, title: 'LC Issued - Action Required', message: `LC ${getDisplayNumber(lc)} issued for ${lc.feeder}. Secret code generated. Assign to lineman.`, type: 'ACTION_REQUIRED' }),
   notifyDelegated: (lc, user) => notify({ recipients: [user], lc, title: 'Work Assigned', message: `You are assigned to ${lc.feeder}. Get secret code from your SO.`, type: 'ACTION_REQUIRED' }),
   notifyWorkComplete: (lc, user) => notify({ recipients: [user], lc, title: 'Field Work Complete', message: `Work done on ${lc.feeder}. Submit close request.`, type: 'ACTION_REQUIRED' }),
   notifyCloseRequested: (lc, users) => notify({ recipients: users, lc, title: 'Close Request', message: `${lc.feeder} area cleared. Remove earth and restore CB.`, type: 'ACTION_REQUIRED' }),
-  notifyLCReleased: (lc, users) => notify({ recipients: users, lc, title: 'LC Released - Awaiting Feeder Energization', message: `LC ${lc.lcNumber} released for ${lc.feeder}. Feeder energization pending final clearance.`, type: 'INFO' }),
+  notifyLCReleased: (lc, users) => notify({ recipients: users, lc, title: 'LC Released - Awaiting Feeder Energization', message: `LC ${getDisplayNumber(lc)} released for ${lc.feeder}. Feeder energization pending final clearance.`, type: 'INFO' }),
   notifyFeederEnergized: (lc, users) => notify({ recipients: users, lc, title: 'Feeder Energized', message: `${lc.feeder} energized after all pending LCs were cleared.`, type: 'SUCCESS' }),
-  notifyLCDelegated: (lc, shiftJEs) => notify({ recipients: shiftJEs, lc, title: 'LC Delegated', message: `LC ${lc.lcNumber} delegated for ${lc.natureOfWork}. Review and take action.`, type: 'ACTION_REQUIRED' }),
+  notifyLCDelegated: (lc, shiftJEs) => notify({ recipients: shiftJEs, lc, title: 'LC Delegated', message: `LC ${getDisplayNumber(lc)} delegated for ${lc.natureOfWork}. Review and take action.`, type: 'ACTION_REQUIRED' }),
 };

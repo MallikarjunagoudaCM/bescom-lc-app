@@ -72,10 +72,12 @@ export default function LCListPage() {
   const handleCreate = async (formData) => {
     try {
       const { data } = await lcApi.create({ ...formData, workType: formType });
-      toast.success('LC request submitted!');
+      toast.success(`Request ${data?.lc?.requestNumber || data?.lc?.lcNumber || 'submitted'} created!`);
       setShowForm(false);
       navigate(`/lc/${data.lc._id}`);
-    } catch {}
+    } catch (err) {
+      toast.error(err?.response?.data?.error || 'Unable to create LC request');
+    }
   };
 
   // Keep `feederOptions` state for linemen mapped through their AE
@@ -143,7 +145,10 @@ export default function LCListPage() {
                 {lcs.map((lc, i) => (
                   <tr key={lc._id} style={{ borderBottom: i < lcs.length - 1 ? '1px solid var(--c-border)' : 'none' }}>
                     <td style={{ padding: '12px 14px' }}>
-                      <div style={{ fontWeight: 600, fontSize: 13, fontFamily: 'monospace' }}>{lc.lcNumber}</div>
+                      <div style={{ fontWeight: 600, fontSize: 13, fontFamily: 'monospace' }}>{lc.lcNumber || lc.requestNumber}</div>
+                      {lc.requestNumber && lc.lcNumber && (
+                        <div style={{ fontSize: 11, color: 'var(--c-text3)' }}>REQ: {lc.requestNumber}</div>
+                      )}
                       <div style={{ fontSize: 11, color: 'var(--c-text3)' }}>{lc.initiatedBy?.name}</div>
                     </td>
                     <td style={{ padding: '12px 14px', fontSize: 13 }}>{lc.feeder}</td>
